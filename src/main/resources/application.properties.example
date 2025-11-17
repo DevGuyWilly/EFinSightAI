@@ -1,0 +1,66 @@
+spring.application.name=e-finsight
+
+# Database Configuration
+# For Google Cloud SQL PostgreSQL or local PostgreSQL
+# Set these as environment variables or update default values below
+#
+# Cloud SQL SSL modes:
+# - require: Requires SSL (may fail if cert validation issues)
+# - prefer: Prefers SSL but falls back to non-SSL (try this first)
+# - allow: Allows SSL but doesn't require it
+# - disable: No SSL (for testing only, not recommended for Cloud SQL)
+spring.datasource.url=jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:truelayer_app}?sslmode=${DB_SSL_MODE:prefer}
+spring.datasource.username=${DB_USERNAME:postgres}
+spring.datasource.password=${DB_PASSWORD:your_database_password}
+spring.datasource.driver-class-name=org.postgresql.Driver
+
+# Connection pool settings (optimized for Cloud SQL)
+spring.datasource.hikari.maximum-pool-size=10
+spring.datasource.hikari.minimum-idle=2
+spring.datasource.hikari.connection-timeout=60000
+spring.datasource.hikari.idle-timeout=600000
+spring.datasource.hikari.max-lifetime=1800000
+spring.datasource.hikari.leak-detection-threshold=60000
+spring.datasource.hikari.keepalive-time=300000
+spring.datasource.hikari.validation-timeout=3000
+
+# JPA/Hibernate Configuration
+spring.jpa.hibernate.ddl-auto=update
+spring.jpa.show-sql=false
+spring.jpa.properties.hibernate.format_sql=true
+spring.jpa.open-in-view=false
+spring.jpa.database-platform=org.hibernate.dialect.PostgreSQLDialect
+spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.PostgreSQLDialect
+
+# JWT Configuration
+# IMPORTANT: Set JWT_SECRET environment variable in production (should be at least 32 characters long)
+# Generate a secure random string for production use
+jwt.secret=${JWT_SECRET:your-super-secret-jwt-key-change-this-in-production-min-32-chars}
+jwt.expiration=86400000
+
+# TrueLayer Configuration
+# Get these values from your TrueLayer Developer Console: https://console.truelayer.com/
+# IMPORTANT: Set these as environment variables in production
+# For development, copy this file to application.properties and update the values below
+truelayer.client-id=your_truelayer_client_id
+truelayer.client-secret=your_truelayer_client_secret
+truelayer.redirect-uri=http://localhost:8080/callback
+truelayer.token-uri=https://auth.truelayer.com/connect/token
+truelayer.api-base-url=https://api.truelayer.com
+
+# LLM Configuration (Gemini or OpenAI)
+# IMPORTANT: Set LLM_API_KEY environment variable in production
+# For OpenAI: set provider=openai
+# For Gemini: set provider=gemini
+llm.provider=gemini
+llm.api-key=${LLM_API_KEY:your_llm_api_key_here}
+llm.gemini-api-url=https://generativelanguage.googleapis.com/v1beta
+llm.embedding-model=gemini-embedding-001
+llm.chat-model=gemini-2.5-flash
+# For OpenAI: use "gpt-4o-mini" or "gpt-4"
+# For Gemini v1beta: 
+#   - "gemini-2.5-flash" (recommended - faster, less likely to be overloaded)
+#   - "gemini-2.5-pro" (more capable but may be overloaded)
+#   - "gemini-1.5-flash-latest" or "gemini-1.5-pro-latest" (older models)
+# Note: gemini-pro is NOT available in v1beta APIs
+
