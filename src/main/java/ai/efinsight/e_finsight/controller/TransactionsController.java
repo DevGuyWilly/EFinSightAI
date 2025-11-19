@@ -83,5 +83,27 @@ public class TransactionsController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
         }
     }
+
+    @PostMapping("/reprocess")
+    public ResponseEntity<?> reprocessTransactions(Authentication authentication) {
+        try {
+            Long userId = (Long) authentication.getPrincipal();
+            log.info("Transaction reprocessing requested for user: {}", userId);
+
+            int processed = transactionService.reprocessAllTransactions(userId);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("message", "Transactions reprocessed successfully");
+            response.put("count", processed);
+            response.put("userId", userId);
+
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            log.error("Error during transaction reprocessing", e);
+            Map<String, String> error = new HashMap<>();
+            error.put("error", "Failed to reprocess transactions: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+        }
+    }
 }
 

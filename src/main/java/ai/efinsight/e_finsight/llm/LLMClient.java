@@ -41,43 +41,63 @@ public class LLMClient {
     }
 
     private String openAIChatCompletion(String systemPrompt, String userMessage) {
+        // URL is the URL to the LLM
         String url = (config.getOpenaiApiUrl() != null ? config.getOpenaiApiUrl() : "https://api.openai.com/v1") + "/chat/completions";
+
+        // Model is the model to use for the LLM
         String model = config.getChatModel() != null ? config.getChatModel() : "gpt-4o-mini";
 
+        // Headers is the headers to the LLM
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.setBearerAuth(config.getApiKey());
 
+        // Body is the request body to the LLM
         Map<String, Object> body = new HashMap<>();
         body.put("model", model);
         
+        // Messages is the list of messages to the LLM
         List<Map<String, String>> messages = new ArrayList<>();
+
+        
         if (systemPrompt != null && !systemPrompt.isEmpty()) {
+
+            // System message is the system prompt
             Map<String, String> systemMsg = new HashMap<>();
             systemMsg.put("role", "system");
             systemMsg.put("content", systemPrompt);
             messages.add(systemMsg);
         }
         
+        // User message is the user's input
         Map<String, String> userMsg = new HashMap<>();
         userMsg.put("role", "user");
         userMsg.put("content", userMessage);
         messages.add(userMsg);
         
+        // Body is the request body to the LLM
         body.put("messages", messages);
+
+        // Temperature just means the randomness of the response
         body.put("temperature", 0.7);
 
+        // Request is the request to the LLM
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
 
         try {
             ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.POST, request, String.class);
 
             if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
+                // Parse the response body to a JSON node
                 JsonNode jsonNode = objectMapper.readTree(response.getBody());
+                // Get the content from the JSON node
                 String content = jsonNode.get("choices").get(0).get("message").get("content").asText();
+                // Logs for debugging
                 log.debug("OpenAI chat completion successful");
+                // Return the content
                 return content;
             } else {
+                // If the response is not OK, throw an error
                 throw new RuntimeException("OpenAI API returned: " + response.getStatusCode());
             }
         } catch (Exception e) {
@@ -87,46 +107,84 @@ public class LLMClient {
     }
 
     private String geminiChatCompletion(String systemPrompt, String userMessage) {
+        
+        // Base URL is the base URL to the Gemini API
         String baseUrl = config.getGeminiApiUrl() != null ? config.getGeminiApiUrl() : "https://generativelanguage.googleapis.com/v1beta";
+
+        // Model is the model to use for the Gemini API
         String model = config.getChatModel() != null ? config.getChatModel() : "gemini-2.5-flash";
+        
+        // API Key is the API key to the Gemini API
         String apiKey = config.getApiKey();
+
+        // If the API key is not configured, throw an error
         
         if (apiKey == null || apiKey.isEmpty()) {
             throw new RuntimeException("Gemini API key is not configured. Please set llm.api-key in application.properties");
         }
         
+        // URL is the URL to the Gemini API
         String url = baseUrl + "/models/" + model + ":generateContent?key=" + apiKey;
         log.info("Calling Gemini API with model: {} at URL: {}", model, url.replace("?key=" + apiKey, "?key=***"));
 
+        // Headers is the headers to the Gemini API
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
 
+        // Full prompt (System prompt + User message) is the full prompt to the Gemini API
         String fullPrompt = userMessage;
+
+        // If the system prompt is not configured, throw an error
         if (systemPrompt != null && !systemPrompt.isEmpty()) {
             fullPrompt = systemPrompt + "\n\n" + userMessage;
-        }
+        }   
         
+        //construct the request body to the Gemini API
         Map<String, Object> body = new HashMap<>();
+
+        // Contents is the list of contents to the Gemini API
         List<Map<String, Object>> contents = new ArrayList<>();
+
+        // Content entry is the content entry to the Gemini API, it contains the message parts
         Map<String, Object> contentEntry = new HashMap<>();
+
+        // Message parts is the list of message parts to the Gemini API
         List<Map<String, String>> messageParts = new ArrayList<>();
+        // Text part is the text part to the Gemini API
         Map<String, String> textPart = new HashMap<>();
+        // Put the full prompt into the text part
         textPart.put("text", fullPrompt);
+        // Add the text part to the message parts
         messageParts.add(textPart);
+        // Add the message parts to the content entry
         contentEntry.put("parts", messageParts);
+        // Add the content entry to the contents
         contents.add(contentEntry);
-        
+
+
+        // Add the contents to the body
         body.put("contents", contents);
+
+
+        // Generation config is the generation config to the Gemini API
         Map<String, Object> generationConfig = new HashMap<>();
+        
+        // Temperature is the temperature to the generation config
         generationConfig.put("temperature", 0.7);
         body.put("generationConfig", generationConfig);
 
+
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
 
+        // Max retries is the maximum number of retries to the Gemini API
         int maxRetries = 3;
+        // Base delay is the base delay to the Gemini API
         long baseDelayMs = 1000;
+        // Attempt is the attempt number to the Gemini API
         
+        // Try to call the Gemini API
         for (int attempt = 1; attempt <= maxRetries; attempt++) {
+            // Try to call the Gemini API
             try {
                 ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.POST, request, String.class);
 

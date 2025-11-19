@@ -33,6 +33,7 @@ public class EmbeddingService {
         return embeddings.isEmpty() ? null : embeddings.get(0);
     }
 
+    // Generate embeddings for a list of texts- using either OpenAI or Gemini
     public List<float[]> generateEmbeddings(List<String> texts) {
         if (texts == null || texts.isEmpty()) {
             return new ArrayList<>();
@@ -117,37 +118,52 @@ public class EmbeddingService {
         
         for (String text : texts) {
             try {
+                // Gemini embedding API format
                 Map<String, Object> body = new HashMap<>();
-                body.put("model", "models/" + embeddingModel);
                 Map<String, Object> content = new HashMap<>();
                 List<Map<String, String>> parts = new ArrayList<>();
                 Map<String, String> part = new HashMap<>();
                 part.put("text", text);
                 parts.add(part);
                 content.put("parts", parts);
+                body.put("model", "models/" + embeddingModel);
                 body.put("content", content);
+                body.put("taskType", "RETRIEVAL_DOCUMENT"); // Optional but recommended
 
                 String fullUrl = url + "?key=" + config.getApiKey();
+                log.debug("Calling Gemini embedding API: {} with model: {}", fullUrl, embeddingModel);
                 HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
 
                 ResponseEntity<String> response = restTemplate.exchange(fullUrl, HttpMethod.POST, request, String.class);
 
                 if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
                     JsonNode jsonNode = objectMapper.readTree(response.getBody());
-                    JsonNode embedding = jsonNode.get("embedding").get("values");
                     
-                    float[] embeddingArray = new float[embedding.size()];
-                    for (int i = 0; i < embedding.size(); i++) {
-                        embeddingArray[i] = (float) embedding.get(i).asDouble();
+                    if (jsonNode.has("embedding") && jsonNode.get("embedding").has("values")) {
+                        JsonNode embedding = jsonNode.get("embedding").get("values");
+                        
+                        float[] embeddingArray = new float[embedding.size()];
+                        for (int i = 0; i < embedding.size(); i++) {
+                            embeddingArray[i] = (float) embedding.get(i).asDouble();
+                        }
+                        embeddings.add(embeddingArray);
+                        log.debug("Successfully generated embedding (dimension: {})", embeddingArray.length);
+                    } else {
+                        log.error("Gemini API response missing embedding field. Response: {}", response.getBody());
+                        throw new RuntimeException("Invalid response structure from Gemini API");
                     }
-                    embeddings.add(embeddingArray);
                 } else {
-                    log.warn("Gemini API returned: {} for text: {}", response.getStatusCode(), text.substring(0, Math.min(50, text.length())));
-                    embeddings.add(new float[768]);
+                    log.error("Gemini API returned: {} for text: {}. Response body: {}", 
+                        response.getStatusCode(), 
+                        text.substring(0, Math.min(50, text.length())),
+                        response.getBody());
+                    throw new RuntimeException("Gemini API returned status: " + response.getStatusCode());
                 }
             } catch (Exception e) {
-                log.warn("Error generating embedding for text, using fallback", e);
-                embeddings.add(new float[768]);
+                log.error("Error generating embedding for text: {}. Error: {}", 
+                    text.substring(0, Math.min(100, text.length())), 
+                    e.getMessage(), e);
+                throw new RuntimeException("Failed to generate embedding: " + e.getMessage(), e);
             }
         }
 

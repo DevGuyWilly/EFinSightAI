@@ -26,6 +26,8 @@ public class PlanController {
             @RequestBody Map<String, String> request,
             Authentication authentication) {
         Long userId = (Long) authentication.getPrincipal();
+
+        // Get the question from the request
         String question = request.get("question");
         
         if (question == null || question.trim().isEmpty()) {
@@ -35,9 +37,11 @@ public class PlanController {
             return ResponseEntity.badRequest().body(error);
         }
         
+        // Log the request for debugging
         log.info("Generating plan for user: {} with question: {}", userId, question);
         
         try {
+            // 
             AgentCoordinatorService.PlanResponse planResponse = coordinatorService.generatePlan(userId, question);
             
             Map<String, Object> response = new HashMap<>();

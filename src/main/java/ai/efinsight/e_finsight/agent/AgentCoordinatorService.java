@@ -30,6 +30,7 @@ public class AgentCoordinatorService {
         this.ragService = ragService;
     }
 
+    // Generate a comprehensive plan for the user
     public PlanResponse generatePlan(Long userId, String query) {
         log.info("Generating comprehensive plan for user: {} with query: {}", userId, query);
         
@@ -74,6 +75,7 @@ public class AgentCoordinatorService {
         return new PlanResponse(plan, citations, agentResponses);
     }
 
+    // Determine the active agents based on the query
     private List<String> determineActiveAgents(String query) {
         String lowerQuery = query.toLowerCase();
         List<String> agents = new ArrayList<>();
@@ -102,21 +104,26 @@ public class AgentCoordinatorService {
         return agents;
     }
 
+    // Combine the responses from the agents
     private String combineAgentResponses(Map<String, String> responses, String query) {
+        //
         StringBuilder plan = new StringBuilder();
         plan.append("# Financial Plan\n\n");
         plan.append("Based on your question: \"").append(query).append("\"\n\n");
         
+        // If the spending analysis is present, add it to the plan
         if (responses.containsKey("spending_analysis")) {
             plan.append("## Spending Analysis\n\n");
             plan.append(responses.get("spending_analysis")).append("\n\n");
         }
         
+        // If the budget plan is present, add it to the plan
         if (responses.containsKey("budget_plan")) {
             plan.append("## Budget Recommendations\n\n");
             plan.append(responses.get("budget_plan")).append("\n\n");
         }
         
+        // If the investment advice is present, add it to the plan
         if (responses.containsKey("investment_advice")) {
             plan.append("## Investment Advice\n\n");
             plan.append(responses.get("investment_advice")).append("\n\n");
@@ -125,6 +132,7 @@ public class AgentCoordinatorService {
         return plan.toString();
     }
 
+    // Plan response is the response from the agent coordinator service
     public static class PlanResponse {
         private final String plan;
         private final List<String> citations;

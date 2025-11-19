@@ -25,6 +25,9 @@ public class TransactionChunk {
     @Column(name = "chunk_index")
     private Integer chunkIndex; // If transaction is split into multiple chunks
 
+    @Column(name = "vertex_datapoint_id")
+    private String vertexDatapointId; // Vertex AI Vector Search datapoint ID
+
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
@@ -88,6 +91,14 @@ public class TransactionChunk {
 
     public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public String getVertexDatapointId() {
+        return vertexDatapointId;
+    }
+
+    public void setVertexDatapointId(String vertexDatapointId) {
+        this.vertexDatapointId = vertexDatapointId;
     }
 }
 

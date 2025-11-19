@@ -39,18 +39,20 @@ public class TransactionService {
         this.vectorStoreService = vectorStoreService;
     }
 
+    // Ingest transactions for a user
     @Transactional
     public int ingestTransactions(Long userId) {
         log.info("Starting transaction ingestion for user: {}", userId);
         String userIdStr = String.valueOf(userId);
 
         try {
+            // Get the accounts for the user
             List<TrueLayerAccountDto> accounts = apiService.getAccounts(userIdStr);
             log.info("Found {} accounts for user: {}", accounts.size(), userId);
 
             int totalIngested = 0;
             String from = LocalDate.now().minusDays(90).toString();
-
+            
             for (TrueLayerAccountDto account : accounts) {
                 try {
                     List<TrueLayerTransactionDto> transactions = apiService.getAccountTransactions(
@@ -167,6 +169,24 @@ public class TransactionService {
         
         log.info("Processed {} transactions for user: {}", processed, userId);
         return processed;
+    }
+
+    @Transactional
+    public int reprocessAllTransactions(Long userId) {
+        log.info("Re-processing all transactions for user: {}", userId);
+        
+        // Delete all existing chunks for this user
+        vectorStoreService.deleteChunksByUserId(userId);
+        
+        // Mark all transactions as unprocessed
+        List<Transaction> allTransactions = transactionRepository.findByUserId(userId);
+        for (Transaction transaction : allTransactions) {
+            transaction.setChunked(false);
+            transactionRepository.save(transaction);
+        }
+        
+        // Process all transactions
+        return processUnprocessedTransactions(userId);
     }
 }
 
