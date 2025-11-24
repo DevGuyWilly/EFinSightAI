@@ -33,17 +33,25 @@ public class VectorStoreService {
 
     @Transactional
     public void storeChunk(Long userId, Long transactionId, String chunkText, float[] embedding, Integer chunkIndex) {
+        
+        // Create a new transaction chunk
         TransactionChunk chunk = new TransactionChunk();
+
         chunk.setUserId(userId);
         chunk.setTransactionId(transactionId);
         chunk.setChunkText(chunkText);
+
+        // Convert float[] → String for PostgreSQL storage
         chunk.setEmbedding(embeddingService.embeddingToString(embedding));
+        // Result: "[0.123,-0.456,0.789,...]" (JSON array as string)
+
         chunk.setChunkIndex(chunkIndex);
         
         // Save to PostgreSQL first to get the ID
         chunk = chunkRepository.save(chunk);
         
-        // Store in Vertex AI Vector Search
+
+        // Not working yet - Store in Vertex AI Vector Search - Not working yet
         if (vertexAIVectorStore != null) {
             try {
                 String datapointId = vertexAIVectorStore.upsertDatapoint(
@@ -73,7 +81,8 @@ public class VectorStoreService {
     }
 
     public List<ChunkSimilarity> searchSimilarWithScores(Long userId, float[] queryEmbedding, int topK) {
-        // Use Vertex AI Vector Search if available
+        // Use Vertex AI Vector Search if available - 
+        // Not working yet - Vertex AI Vector Search - Not working yet
         if (vertexAIVectorStore != null) {
             try {
                 List<VertexAIVectorStoreService.VectorSearchResult> vertexResults = 
@@ -123,7 +132,9 @@ public class VectorStoreService {
         for (TransactionChunk chunk : allChunks) {
             float[] chunkEmbedding = embeddingService.stringToEmbedding(chunk.getEmbedding());
             if (chunkEmbedding != null && !isZeroVector(chunkEmbedding)) {
+                // Calculate the cosine similarity between the query embedding and the chunk embedding
                 double similarity = cosineSimilarity(queryEmbedding, chunkEmbedding);
+                // Add the chunk and similarity to the list of similarities
                 similarities.add(new ChunkSimilarity(chunk, similarity));
             }
         }
@@ -138,6 +149,7 @@ public class VectorStoreService {
         log.info("Found {} similar chunks via PostgreSQL for user: {} (top similarity: {})", 
             results.size(), userId, 
             results.isEmpty() ? 0.0 : results.get(0).similarity);
+        // Return the list of similar chunks
         return results;
     }
 

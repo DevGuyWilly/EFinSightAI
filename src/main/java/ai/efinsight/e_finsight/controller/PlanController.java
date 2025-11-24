@@ -1,6 +1,7 @@
 package ai.efinsight.e_finsight.controller;
 
 import ai.efinsight.e_finsight.agent.AgentCoordinatorService;
+import ai.efinsight.e_finsight.dto.PlanResponseDto;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
@@ -22,7 +23,7 @@ public class PlanController {
     }
 
     @PostMapping
-    public ResponseEntity<Map<String, Object>> generatePlan(
+    public ResponseEntity<?> generatePlan(
             @RequestBody Map<String, String> request,
             Authentication authentication) {
         Long userId = (Long) authentication.getPrincipal();
@@ -31,31 +32,43 @@ public class PlanController {
         String question = request.get("question");
         
         if (question == null || question.trim().isEmpty()) {
-            Map<String, Object> error = new HashMap<>();
-            error.put("success", false);
-            error.put("error", "Question is required");
+            PlanResponseDto error = new PlanResponseDto();
+            error.setSuccess(false);
+            error.setError("Question is required");
             return ResponseEntity.badRequest().body(error);
         }
         
+        // Check if legacy format is requested (for backward compatibility)
+        boolean legacy = request.containsKey("legacy") && 
+                        Boolean.parseBoolean(request.get("legacy"));
+        
         // Log the request for debugging
-        log.info("Generating plan for user: {} with question: {}", userId, question);
+        log.info("Generating plan for user: {} with question: {} (legacy: {})", 
+            userId, question, legacy);
         
         try {
-            // 
-            AgentCoordinatorService.PlanResponse planResponse = coordinatorService.generatePlan(userId, question);
-            
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("plan", planResponse.getPlan());
-            response.put("citations", planResponse.getCitations());
-            response.put("question", question);
-            
-            return ResponseEntity.ok(response);
+            if (legacy) {
+                // Return legacy format for backward compatibility
+                AgentCoordinatorService.PlanResponse planResponse = 
+                    coordinatorService.generatePlan(userId, question);
+                
+                Map<String, Object> response = new HashMap<>();
+                response.put("success", true);
+                response.put("plan", planResponse.getPlan());
+                response.put("citations", planResponse.getCitations());
+                response.put("question", question);
+                
+                return ResponseEntity.ok(response);
+            } else {
+                // Return structured response (default)
+                PlanResponseDto planResponse = coordinatorService.generateStructuredPlan(userId, question);
+                return ResponseEntity.ok(planResponse);
+            }
         } catch (Exception e) {
             log.error("Error generating plan for user: {}", userId, e);
-            Map<String, Object> error = new HashMap<>();
-            error.put("success", false);
-            error.put("error", "Failed to generate plan: " + e.getMessage());
+            PlanResponseDto error = new PlanResponseDto();
+            error.setSuccess(false);
+            error.setError("Failed to generate plan: " + e.getMessage());
             return ResponseEntity.internalServerError().body(error);
         }
     }

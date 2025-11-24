@@ -29,7 +29,9 @@ public class EmbeddingService {
     public float[] generateEmbedding(String text) {
         List<String> texts = new ArrayList<>();
         texts.add(text);
+        // Generate embeddings for the list of texts
         List<float[]> embeddings = generateEmbeddings(texts);
+        // If the embeddings are empty, return null
         return embeddings.isEmpty() ? null : embeddings.get(0);
     }
 

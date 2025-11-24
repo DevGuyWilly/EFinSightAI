@@ -133,7 +133,9 @@ public class TransactionService {
 
     @Transactional
     public void processTransactionChunks(Transaction transaction) {
+        // Chunk the transaction into chunks
         List<String> chunks = chunkingService.chunkTransaction(transaction);
+        // Generate embeddings for the chunks
         List<float[]> embeddings = embeddingService.generateEmbeddings(chunks);
         
         if (chunks.size() == embeddings.size()) {
