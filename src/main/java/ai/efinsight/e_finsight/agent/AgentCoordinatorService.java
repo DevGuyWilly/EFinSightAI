@@ -52,48 +52,40 @@ public class AgentCoordinatorService {
         log.info("Generating comprehensive plan for user: {} with query: {}", userId, query);
         
         List<RagService.RagContext> contexts = ragService.retrieveContext(userId, query, 15);
-        List<String> activeAgents = determineActiveAgents(query);
-        
         Map<String, String> agentResponses = new HashMap<>();
         List<CitationDto> citations = buildStructuredCitations(contexts);
         
-        if (activeAgents.contains("spending")) {
-            try {
-                log.info("Running ADK SpendingAgent");
-                Map<String, Object> adkResult = adkSpendingAgent.run(userId, query).get();
-                agentResponses.put("spending_analysis", 
-                    (String) adkResult.getOrDefault("spending_analysis_json", 
-                        adkResult.getOrDefault("spending_analysis", "No analysis available")));
-            } catch (Exception e) {
-                log.error("Error in ADK SpendingAgent", e);
-                agentResponses.put("spending_analysis", "Unable to analyze spending at this time. Error: " + e.getMessage());
-            }
+        try {
+            log.info("Running ADK SpendingAgent");
+            Map<String, Object> adkResult = adkSpendingAgent.run(userId, query).get();
+            agentResponses.put("spending_analysis", 
+                (String) adkResult.getOrDefault("spending_analysis_json", 
+                    adkResult.getOrDefault("spending_analysis", "No analysis available")));
+        } catch (Exception e) {
+            log.error("Error in ADK SpendingAgent", e);
+            agentResponses.put("spending_analysis", "Unable to analyze spending at this time. Error: " + e.getMessage());
         }
         
-        if (activeAgents.contains("budget")) {
-            try {
-                log.info("Running ADK BudgetAgent");
-                Map<String, Object> adkResult = adkBudgetAgent.run(userId, query).get();
-                agentResponses.put("budget_plan", 
-                    (String) adkResult.getOrDefault("budget_plan_json", 
-                        adkResult.getOrDefault("budget_plan", "No plan available")));
-            } catch (Exception e) {
-                log.error("Error in ADK BudgetAgent", e);
-                agentResponses.put("budget_plan", "Unable to create budget plan at this time. Error: " + e.getMessage());
-            }
+        try {
+            log.info("Running ADK BudgetAgent");
+            Map<String, Object> adkResult = adkBudgetAgent.run(userId, query).get();
+            agentResponses.put("budget_plan", 
+                (String) adkResult.getOrDefault("budget_plan_json", 
+                    adkResult.getOrDefault("budget_plan", "No plan available")));
+        } catch (Exception e) {
+            log.error("Error in ADK BudgetAgent", e);
+            agentResponses.put("budget_plan", "Unable to create budget plan at this time. Error: " + e.getMessage());
         }
         
-        if (activeAgents.contains("investment")) {
-            try {
-                log.info("Running ADK InvestmentAgent");
-                Map<String, Object> adkResult = adkInvestmentAgent.run(userId, query).get();
-                agentResponses.put("investment_advice", 
-                    (String) adkResult.getOrDefault("investment_advice_json", 
-                        adkResult.getOrDefault("investment_advice", "No advice available")));
-            } catch (Exception e) {
-                log.error("Error in ADK InvestmentAgent", e);
-                agentResponses.put("investment_advice", "Unable to provide investment advice at this time. Error: " + e.getMessage());
-            }
+        try {
+            log.info("Running ADK InvestmentAgent");
+            Map<String, Object> adkResult = adkInvestmentAgent.run(userId, query).get();
+            agentResponses.put("investment_advice", 
+                (String) adkResult.getOrDefault("investment_advice_json", 
+                    adkResult.getOrDefault("investment_advice", "No advice available")));
+        } catch (Exception e) {
+            log.error("Error in ADK InvestmentAgent", e);
+            agentResponses.put("investment_advice", "Unable to provide investment advice at this time. Error: " + e.getMessage());
         }
         
         String plan = combineAgentResponses(agentResponses, query);
@@ -159,35 +151,6 @@ public class AgentCoordinatorService {
         }
     }
 
-    // Determine the active agents based on the query
-    private List<String> determineActiveAgents(String query) {
-        String lowerQuery = query.toLowerCase();
-        List<String> agents = new ArrayList<>();
-        
-        if (lowerQuery.contains("spending") || lowerQuery.contains("expense") || 
-            lowerQuery.contains("where") || lowerQuery.contains("how much")) {
-            agents.add("spending");
-        }
-        
-        if (lowerQuery.contains("budget") || lowerQuery.contains("plan") || 
-            lowerQuery.contains("allocate") || lowerQuery.contains("limit")) {
-            agents.add("budget");
-        }
-        
-        if (lowerQuery.contains("invest") || lowerQuery.contains("save") || 
-            lowerQuery.contains("grow") || lowerQuery.contains("return")) {
-            agents.add("investment");
-        }
-        
-        if (agents.isEmpty()) {
-            agents.add("spending");
-            agents.add("budget");
-            agents.add("investment");
-        }
-        
-        return agents;
-    }
-
     // Combine the responses from the agents
     private String combineAgentResponses(Map<String, String> responses, String query) {
         StringBuilder plan = new StringBuilder();
@@ -213,90 +176,6 @@ public class AgentCoordinatorService {
         }
         
         return plan.toString();
-    }
-
-    // Generate structured plan response DTO
-    public PlanResponseDto generateStructuredPlan(Long userId, String query) {
-        log.info("Generating structured plan for user: {} with query: {}", userId, query);
-        
-        List<RagService.RagContext> contexts = ragService.retrieveContext(userId, query, 15);
-        List<String> activeAgents = determineActiveAgents(query);
-        
-        Map<String, String> agentResponses = new HashMap<>();
-        List<CitationDto> citations = buildStructuredCitations(contexts);
-        
-        // Execute agents
-        String spendingAnalysis = null;
-        String budgetPlan = null;
-        String investmentAdvice = null;
-        
-        if (activeAgents.contains("spending")) {
-            try {
-                spendingAnalysis = spendingAnalyst.analyzeSpending(userId, query);
-                agentResponses.put("spending_analysis", spendingAnalysis);
-            } catch (Exception e) {
-                log.error("Error in SpendingAnalyst", e);
-                spendingAnalysis = "Unable to analyze spending at this time.";
-            }
-        }
-        
-        if (activeAgents.contains("budget")) {
-            try {
-                budgetPlan = budgetPlanner.createBudget(userId, query);
-                agentResponses.put("budget_plan", budgetPlan);
-            } catch (Exception e) {
-                log.error("Error in BudgetPlanner", e);
-                budgetPlan = "Unable to create budget plan at this time.";
-            }
-        }
-        
-        if (activeAgents.contains("investment")) {
-            try {
-                investmentAdvice = investmentAdvisor.provideAdvice(userId, query);
-                agentResponses.put("investment_advice", investmentAdvice);
-            } catch (Exception e) {
-                log.error("Error in InvestmentAdvisor", e);
-                investmentAdvice = "Unable to provide investment advice at this time.";
-            }
-        }
-        
-        // Extract summary from spending analysis (first paragraph)
-        String summary = extractSummary(spendingAnalysis, budgetPlan, investmentAdvice);
-        
-        // Organize sections
-        PlanResponseDto.PlanSections sections = new PlanResponseDto.PlanSections(
-            spendingAnalysis,
-            budgetPlan,
-            investmentAdvice
-        );
-        
-        return new PlanResponseDto(true, query, summary, sections, citations, agentResponses);
-    }
-
-    // Extract a concise summary from agent responses
-    private String extractSummary(String spendingAnalysis, String budgetPlan, String investmentAdvice) {
-        if (spendingAnalysis != null && !spendingAnalysis.isEmpty()) {
-            // Try to extract first paragraph or executive summary
-            String[] lines = spendingAnalysis.split("\n");
-            for (String line : lines) {
-                if (line.contains("Executive Summary") || line.contains("Summary")) {
-                    // Find the next non-empty line
-                    for (int i = 0; i < lines.length; i++) {
-                        if (lines[i].equals(line) && i + 1 < lines.length) {
-                            String summary = lines[i + 1].trim();
-                            if (!summary.isEmpty() && summary.length() < 500) {
-                                return summary;
-                            }
-                        }
-                    }
-                }
-            }
-            // Fallback: first 200 characters
-            return spendingAnalysis.length() > 200 
-                ? spendingAnalysis.substring(0, 200) + "..." 
-                : spendingAnalysis;
-        }
-        return "Financial analysis based on your transaction history.";
     }
 
     // Plan response is the response from the agent coordinator service
