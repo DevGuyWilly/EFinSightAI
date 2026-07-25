@@ -5,7 +5,6 @@ import ai.efinsight.e_finsight.adk.AdkBudgetAgentNative;
 import ai.efinsight.e_finsight.adk.AdkInvestmentAgentNative;
 import ai.efinsight.e_finsight.dto.CitationDto;
 import ai.efinsight.e_finsight.dto.PlanResponseDto;
-import ai.efinsight.e_finsight.feature.FeatureFlags;
 import ai.efinsight.e_finsight.model.Transaction;
 import ai.efinsight.e_finsight.rag.RagService;
 import ai.efinsight.e_finsight.repository.TransactionRepository;
@@ -24,15 +23,11 @@ import java.util.regex.Pattern;
 public class AgentCoordinatorService {
     private static final Logger log = LoggerFactory.getLogger(AgentCoordinatorService.class);
 
-    private final SpendingAnalyst spendingAnalyst;
-    private final BudgetPlanner budgetPlanner;
-    private final InvestmentAdvisor investmentAdvisor;
     private final AdkSpendingAgentNative adkSpendingAgent;
     private final AdkBudgetAgentNative adkBudgetAgent;
     private final AdkInvestmentAgentNative adkInvestmentAgent;
     private final RagService ragService;
     private final TransactionRepository transactionRepository;
-    private final FeatureFlags featureFlags;
 
     // Pattern to parse transaction text: "Transaction: MERCHANT | Amount: -5.00 GBP | Category: PURCHASE | Date: 2025-11-14T00:00:00Z"
     private static final Pattern TRANSACTION_PATTERN = Pattern.compile(
@@ -40,24 +35,16 @@ public class AgentCoordinatorService {
     );
 
     public AgentCoordinatorService(
-            SpendingAnalyst spendingAnalyst,
-            BudgetPlanner budgetPlanner,
-            InvestmentAdvisor investmentAdvisor,
             AdkSpendingAgentNative adkSpendingAgent,
             AdkBudgetAgentNative adkBudgetAgent,
             AdkInvestmentAgentNative adkInvestmentAgent,
             RagService ragService,
-            TransactionRepository transactionRepository,
-            FeatureFlags featureFlags) {
-        this.spendingAnalyst = spendingAnalyst;
-        this.budgetPlanner = budgetPlanner;
-        this.investmentAdvisor = investmentAdvisor;
+            TransactionRepository transactionRepository) {
         this.adkSpendingAgent = adkSpendingAgent;
         this.adkBudgetAgent = adkBudgetAgent;
         this.adkInvestmentAgent = adkInvestmentAgent;
         this.ragService = ragService;
         this.transactionRepository = transactionRepository;
-        this.featureFlags = featureFlags;
     }
 
     // Generate a comprehensive plan for the user
@@ -72,51 +59,39 @@ public class AgentCoordinatorService {
         
         if (activeAgents.contains("spending")) {
             try {
-                if (featureFlags.getAdk().isEnabled()) {
-                    log.info("Using ADK SpendingAgent (feature flag enabled)");
-                    Map<String, Object> adkResult = adkSpendingAgent.run(userId, query).get();
-                    agentResponses.put("spending_analysis", 
-                        (String) adkResult.getOrDefault("spending_analysis_json", 
-                            adkResult.getOrDefault("spending_analysis", "No analysis available")));
-                } else {
-                    agentResponses.put("spending_analysis", spendingAnalyst.analyzeSpending(userId, query));
-                }
+                log.info("Running ADK SpendingAgent");
+                Map<String, Object> adkResult = adkSpendingAgent.run(userId, query).get();
+                agentResponses.put("spending_analysis", 
+                    (String) adkResult.getOrDefault("spending_analysis_json", 
+                        adkResult.getOrDefault("spending_analysis", "No analysis available")));
             } catch (Exception e) {
-                log.error("Error in SpendingAnalyst/ADK", e);
+                log.error("Error in ADK SpendingAgent", e);
                 agentResponses.put("spending_analysis", "Unable to analyze spending at this time. Error: " + e.getMessage());
             }
         }
         
         if (activeAgents.contains("budget")) {
             try {
-                if (featureFlags.getAdk().isEnabled()) {
-                    log.info("Using ADK BudgetAgent (feature flag enabled)");
-                    Map<String, Object> adkResult = adkBudgetAgent.run(userId, query).get();
-                    agentResponses.put("budget_plan", 
-                        (String) adkResult.getOrDefault("budget_plan_json", 
-                            adkResult.getOrDefault("budget_plan", "No plan available")));
-                } else {
-                    agentResponses.put("budget_plan", budgetPlanner.createBudget(userId, query));
-                }
+                log.info("Running ADK BudgetAgent");
+                Map<String, Object> adkResult = adkBudgetAgent.run(userId, query).get();
+                agentResponses.put("budget_plan", 
+                    (String) adkResult.getOrDefault("budget_plan_json", 
+                        adkResult.getOrDefault("budget_plan", "No plan available")));
             } catch (Exception e) {
-                log.error("Error in BudgetPlanner/ADK", e);
+                log.error("Error in ADK BudgetAgent", e);
                 agentResponses.put("budget_plan", "Unable to create budget plan at this time. Error: " + e.getMessage());
             }
         }
         
         if (activeAgents.contains("investment")) {
             try {
-                if (featureFlags.getAdk().isEnabled()) {
-                    log.info("Using ADK InvestmentAgent (feature flag enabled)");
-                    Map<String, Object> adkResult = adkInvestmentAgent.run(userId, query).get();
-                    agentResponses.put("investment_advice", 
-                        (String) adkResult.getOrDefault("investment_advice_json", 
-                            adkResult.getOrDefault("investment_advice", "No advice available")));
-                } else {
-                    agentResponses.put("investment_advice", investmentAdvisor.provideAdvice(userId, query));
-                }
+                log.info("Running ADK InvestmentAgent");
+                Map<String, Object> adkResult = adkInvestmentAgent.run(userId, query).get();
+                agentResponses.put("investment_advice", 
+                    (String) adkResult.getOrDefault("investment_advice_json", 
+                        adkResult.getOrDefault("investment_advice", "No advice available")));
             } catch (Exception e) {
-                log.error("Error in InvestmentAdvisor/ADK", e);
+                log.error("Error in ADK InvestmentAgent", e);
                 agentResponses.put("investment_advice", "Unable to provide investment advice at this time. Error: " + e.getMessage());
             }
         }

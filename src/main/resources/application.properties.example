@@ -64,7 +64,3 @@ llm.chat-model=gemini-2.5-flash
 #   - "gemini-1.5-flash-latest" or "gemini-1.5-pro-latest" (older models)
 # Note: gemini-pro is NOT available in v1beta APIs
 
-# Feature flags
-# Enable ADK-based orchestration (false by default)
-feature.adk.enabled=${FEATURE_ADK_ENABLED:false}
-

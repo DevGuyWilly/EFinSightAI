@@ -1,6 +1,5 @@
 package ai.efinsight.e_finsight.adk;
 
-import ai.efinsight.e_finsight.agent.BudgetPlanner;
 import com.google.adk.agents.LlmAgent;
 import com.google.adk.runtime.AgentExecutionResult;
 import com.google.adk.runtime.AgentRunner;
@@ -18,11 +17,9 @@ public class AdkBudgetAgentNative {
     private static final Logger log = LoggerFactory.getLogger(AdkBudgetAgentNative.class);
 
     private final LlmAgent budgetLlmAgent;
-    private final BudgetPlanner budgetPlanner; // fallback
 
-    public AdkBudgetAgentNative(LlmAgent budgetLlmAgent, BudgetPlanner budgetPlanner) {
+    public AdkBudgetAgentNative(LlmAgent budgetLlmAgent) {
         this.budgetLlmAgent = budgetLlmAgent;
-        this.budgetPlanner = budgetPlanner;
     }
 
     public CompletableFuture<Map<String, Object>> run(Long userId, String query) {
@@ -47,19 +44,18 @@ public class AdkBudgetAgentNative {
                     out.put("budget_plan_json", json);
                     return out;
                 } else {
-                    log.warn("ADK response did not include JSON for budget, falling back to BudgetPlanner");
-                    String fallback = budgetPlanner.createBudget(userId, query);
+                    log.warn("ADK response did not include JSON for budget");
                     Map<String, Object> out = new HashMap<>();
-                    out.put("budget_plan", fallback);
+                    out.put("budget_plan", text);
                     return out;
                 }
             } catch (Exception e) {
-                log.error("ADK LlmAgent execution failed for budget; using fallback", e);
-                String fallback = budgetPlanner.createBudget(userId, query);
+                log.error("ADK LlmAgent execution failed for budget", e);
                 Map<String, Object> out = new HashMap<>();
-                out.put("budget_plan", fallback);
+                out.put("budget_plan", "Error: " + e.getMessage());
                 return out;
             }
         });
     }
 }
+
