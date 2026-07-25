@@ -111,6 +111,20 @@
 			<artifactId>spring-security-test</artifactId>
 			<scope>test</scope>
 		</dependency>
+		<!-- Google ADK for Java (Agent Development Kit) -->
+		<dependency>
+		  <groupId>com.google.adk</groupId>
+		  <artifactId>google-adk</artifactId>
+		  <version>1.7.0</version>
+		</dependency>
+		<!-- ADK Dev UI (optional, dev only) -->
+		<dependency>
+		  <groupId>com.google.adk</groupId>
+		  <artifactId>google-adk-dev</artifactId>
+		  <version>1.7.0</version>
+		  <scope>runtime</scope>
+		  <optional>true</optional>
+		</dependency>
 		<!-- Google GenAI SDK -->
 		<dependency>
 			<groupId>com.google.genai</groupId>
