@@ -17,11 +17,11 @@ import java.util.concurrent.CompletableFuture;
 public class AdkBudgetAgentNative {
     private static final Logger log = LoggerFactory.getLogger(AdkBudgetAgentNative.class);
 
-    private final LlmAgent spendingLlmAgent;
+    private final LlmAgent budgetLlmAgent;
     private final BudgetPlanner budgetPlanner; // fallback
 
-    public AdkBudgetAgentNative(LlmAgent spendingLlmAgent, BudgetPlanner budgetPlanner) {
-        this.spendingLlmAgent = spendingLlmAgent;
+    public AdkBudgetAgentNative(LlmAgent budgetLlmAgent, BudgetPlanner budgetPlanner) {
+        this.budgetLlmAgent = budgetLlmAgent;
         this.budgetPlanner = budgetPlanner;
     }
 
@@ -34,7 +34,7 @@ public class AdkBudgetAgentNative {
 
             try {
                 AgentRunner runner = AgentRunner.create();
-                AgentExecutionResult result = runner.run(spendingLlmAgent, prompt, ExecutionOptions.defaultOptions());
+                AgentExecutionResult result = runner.run(budgetLlmAgent, prompt, ExecutionOptions.defaultOptions());
 
                 String text = result.getOutputText();
                 log.debug("ADK LlmAgent output (budget): {}", text);

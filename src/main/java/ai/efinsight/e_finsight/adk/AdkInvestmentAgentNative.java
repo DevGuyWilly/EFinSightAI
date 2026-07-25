@@ -17,11 +17,11 @@ import java.util.concurrent.CompletableFuture;
 public class AdkInvestmentAgentNative {
     private static final Logger log = LoggerFactory.getLogger(AdkInvestmentAgentNative.class);
 
-    private final LlmAgent spendingLlmAgent;
+    private final LlmAgent investmentLlmAgent;
     private final InvestmentAdvisor investmentAdvisor; // fallback
 
-    public AdkInvestmentAgentNative(LlmAgent spendingLlmAgent, InvestmentAdvisor investmentAdvisor) {
-        this.spendingLlmAgent = spendingLlmAgent;
+    public AdkInvestmentAgentNative(LlmAgent investmentLlmAgent, InvestmentAdvisor investmentAdvisor) {
+        this.investmentLlmAgent = investmentLlmAgent;
         this.investmentAdvisor = investmentAdvisor;
     }
 
@@ -29,12 +29,15 @@ public class AdkInvestmentAgentNative {
         return CompletableFuture.supplyAsync(() -> {
             log.info("AdkInvestmentAgentNative running ADK LlmAgent for user: {}", userId);
 
-            String prompt = "You are a financial investment advisor. Given the user's question and the retrieved transaction context, produce a JSON object with keys: recommendations (list of {instrument, amount, rationale}), risk_profile (string), steps (list). Only output valid JSON." +
+            String prompt = "You are a financial investment advisor. Given the user's question and the retrieved transaction context, " +
+                    "produce a JSON object with " +
+                    "keys: recommendations (list of {instrument, amount, rationale}), risk_profile (string), steps (list). " +
+                    "Only output valid JSON." +
                     "\n\nUser question: " + query + "\n\nProvide output as JSON only.";
 
             try {
                 AgentRunner runner = AgentRunner.create();
-                AgentExecutionResult result = runner.run(spendingLlmAgent, prompt, ExecutionOptions.defaultOptions());
+                AgentExecutionResult result = runner.run(investmentLlmAgent, prompt, ExecutionOptions.defaultOptions());
 
                 String text = result.getOutputText();
                 log.debug("ADK LlmAgent output (investment): {}", text);
