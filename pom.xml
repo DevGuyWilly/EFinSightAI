@@ -125,12 +125,6 @@
 		  <scope>runtime</scope>
 		  <optional>true</optional>
 		</dependency>
-		<!-- Google GenAI SDK -->
-		<dependency>
-			<groupId>com.google.genai</groupId>
-			<artifactId>google-genai</artifactId>
-			<version>1.0.0</version>
-		</dependency>
 		<!-- Google Cloud Vertex AI SDK -->
 		<dependency>
 			<groupId>com.google.cloud</groupId>

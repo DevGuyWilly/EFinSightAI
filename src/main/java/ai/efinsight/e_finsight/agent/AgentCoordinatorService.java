@@ -1,8 +1,6 @@
 package ai.efinsight.e_finsight.agent;
 
-import ai.efinsight.e_finsight.adk.AdkSpendingAgentNative;
-import ai.efinsight.e_finsight.adk.AdkBudgetAgentNative;
-import ai.efinsight.e_finsight.adk.AdkInvestmentAgentNative;
+import ai.efinsight.e_finsight.adk.AdkCoordinatorAgentNative;
 import ai.efinsight.e_finsight.dto.CitationDto;
 import ai.efinsight.e_finsight.dto.PlanResponseDto;
 import ai.efinsight.e_finsight.model.Transaction;
@@ -13,7 +11,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
@@ -23,9 +20,7 @@ import java.util.regex.Pattern;
 public class AgentCoordinatorService {
     private static final Logger log = LoggerFactory.getLogger(AgentCoordinatorService.class);
 
-    private final AdkSpendingAgentNative adkSpendingAgent;
-    private final AdkBudgetAgentNative adkBudgetAgent;
-    private final AdkInvestmentAgentNative adkInvestmentAgent;
+    private final AdkCoordinatorAgentNative adkCoordinatorAgent;
     private final RagService ragService;
     private final TransactionRepository transactionRepository;
 
@@ -35,66 +30,49 @@ public class AgentCoordinatorService {
     );
 
     public AgentCoordinatorService(
-            AdkSpendingAgentNative adkSpendingAgent,
-            AdkBudgetAgentNative adkBudgetAgent,
-            AdkInvestmentAgentNative adkInvestmentAgent,
+            AdkCoordinatorAgentNative adkCoordinatorAgent,
             RagService ragService,
             TransactionRepository transactionRepository) {
-        this.adkSpendingAgent = adkSpendingAgent;
-        this.adkBudgetAgent = adkBudgetAgent;
-        this.adkInvestmentAgent = adkInvestmentAgent;
+        this.adkCoordinatorAgent = adkCoordinatorAgent;
         this.ragService = ragService;
         this.transactionRepository = transactionRepository;
     }
 
-    // Generate a comprehensive plan for the user
-    public PlanResponse generatePlan(Long userId, String query) {
-        log.info("Generating comprehensive plan for user: {} with query: {}", userId, query);
-        
+    // Generate a structured plan response DTO for the user
+    public PlanResponseDto generateStructuredPlan(Long userId, String query) {
+        PlanExecution execution = executePlan(userId, query);
+        Map<String, String> agentResponses = execution.result().agentResponses();
+
+        PlanResponseDto.PlanSections sections = new PlanResponseDto.PlanSections(
+            agentResponses.get("spending_analysis"),
+            agentResponses.get("budget_plan"),
+            agentResponses.get("investment_advice")
+        );
+
+        return new PlanResponseDto(true, query, execution.result().summary(), sections, execution.citations(), agentResponses);
+    }
+
+    // Retrieve RAG context once, then run the ADK root coordinator agent, which decides which specialist(s) to delegate to
+    private PlanExecution executePlan(Long userId, String query) {
+        log.info("Running ADK coordinator for user: {} with query: {}", userId, query);
+
         List<RagService.RagContext> contexts = ragService.retrieveContext(userId, query, 15);
-        Map<String, String> agentResponses = new HashMap<>();
         List<CitationDto> citations = buildStructuredCitations(contexts);
-        
+        String contextText = ragService.buildContextString(contexts);
+
+        AdkCoordinatorAgentNative.CoordinatorResult result;
         try {
-            log.info("Running ADK SpendingAgent");
-            Map<String, Object> adkResult = adkSpendingAgent.run(userId, query).get();
-            agentResponses.put("spending_analysis", 
-                (String) adkResult.getOrDefault("spending_analysis_json", 
-                    adkResult.getOrDefault("spending_analysis", "No analysis available")));
+            result = adkCoordinatorAgent.run(userId, query, contextText).get();
         } catch (Exception e) {
-            log.error("Error in ADK SpendingAgent", e);
-            agentResponses.put("spending_analysis", "Unable to analyze spending at this time. Error: " + e.getMessage());
+            log.error("Error running ADK coordinator", e);
+            result = new AdkCoordinatorAgentNative.CoordinatorResult(
+                "Unable to generate a plan at this time. Error: " + e.getMessage(), Map.of());
         }
-        
-        try {
-            log.info("Running ADK BudgetAgent");
-            Map<String, Object> adkResult = adkBudgetAgent.run(userId, query).get();
-            agentResponses.put("budget_plan", 
-                (String) adkResult.getOrDefault("budget_plan_json", 
-                    adkResult.getOrDefault("budget_plan", "No plan available")));
-        } catch (Exception e) {
-            log.error("Error in ADK BudgetAgent", e);
-            agentResponses.put("budget_plan", "Unable to create budget plan at this time. Error: " + e.getMessage());
-        }
-        
-        try {
-            log.info("Running ADK InvestmentAgent");
-            Map<String, Object> adkResult = adkInvestmentAgent.run(userId, query).get();
-            agentResponses.put("investment_advice", 
-                (String) adkResult.getOrDefault("investment_advice_json", 
-                    adkResult.getOrDefault("investment_advice", "No advice available")));
-        } catch (Exception e) {
-            log.error("Error in ADK InvestmentAgent", e);
-            agentResponses.put("investment_advice", "Unable to provide investment advice at this time. Error: " + e.getMessage());
-        }
-        
-        String plan = combineAgentResponses(agentResponses, query);
-        List<String> citationStrings = new ArrayList<>();
-        for (CitationDto citation : citations) {
-            citationStrings.add(String.format("Transaction ID: %d - %s", 
-                citation.getTransactionId(), citation.getDescription()));
-        }
-        return new PlanResponse(plan, citationStrings, agentResponses);
+
+        return new PlanExecution(result, citations);
+    }
+
+    private record PlanExecution(AdkCoordinatorAgentNative.CoordinatorResult result, List<CitationDto> citations) {
     }
 
     // Build structured citations from RAG contexts
@@ -151,56 +129,5 @@ public class AgentCoordinatorService {
         }
     }
 
-    // Combine the responses from the agents
-    private String combineAgentResponses(Map<String, String> responses, String query) {
-        StringBuilder plan = new StringBuilder();
-        plan.append("# Financial Plan\n\n");
-        plan.append("Based on your question: \"").append(query).append("\"\n\n");
-        
-        // If the spending analysis is present, add it to the plan
-        if (responses.containsKey("spending_analysis")) {
-            plan.append("## Spending Analysis\n\n");
-            plan.append(responses.get("spending_analysis")).append("\n\n");
-        }
-        
-        // If the budget plan is present, add it to the plan
-        if (responses.containsKey("budget_plan")) {
-            plan.append("## Budget Recommendations\n\n");
-            plan.append(responses.get("budget_plan")).append("\n\n");
-        }
-        
-        // If the investment advice is present, add it to the plan
-        if (responses.containsKey("investment_advice")) {
-            plan.append("## Investment Advice\n\n");
-            plan.append(responses.get("investment_advice")).append("\n\n");
-        }
-        
-        return plan.toString();
-    }
-
-    // Plan response is the response from the agent coordinator service
-    public static class PlanResponse {
-        private final String plan;
-        private final List<String> citations;
-        private final Map<String, String> agentResponses;
-
-        public PlanResponse(String plan, List<String> citations, Map<String, String> agentResponses) {
-            this.plan = plan;
-            this.citations = citations;
-            this.agentResponses = agentResponses;
-        }
-
-        public String getPlan() {
-            return plan;
-        }
-
-        public List<String> getCitations() {
-            return citations;
-        }
-
-        public Map<String, String> getAgentResponses() {
-            return agentResponses;
-        }
-    }
 }
 

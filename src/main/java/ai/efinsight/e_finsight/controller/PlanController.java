@@ -8,7 +8,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.HashMap;
 import java.util.Map;
 
 @RestController
@@ -38,32 +37,11 @@ public class PlanController {
             return ResponseEntity.badRequest().body(error);
         }
         
-        // Check if legacy format is requested (for backward compatibility)
-        boolean legacy = request.containsKey("legacy") && 
-                        Boolean.parseBoolean(request.get("legacy"));
-        
-        // Log the request for debugging
-        log.info("Generating plan for user: {} with question: {} (legacy: {})", 
-            userId, question, legacy);
-        
+        log.info("Generating plan for user: {} with question: {}", userId, question);
+
         try {
-            if (legacy) {
-                // Return legacy format for backward compatibility
-                AgentCoordinatorService.PlanResponse planResponse = 
-                    coordinatorService.generatePlan(userId, question);
-                
-                Map<String, Object> response = new HashMap<>();
-                response.put("success", true);
-                response.put("plan", planResponse.getPlan());
-                response.put("citations", planResponse.getCitations());
-                response.put("question", question);
-                
-                return ResponseEntity.ok(response);
-            } else {
-                // Return structured response (default)
-                PlanResponseDto planResponse = coordinatorService.generateStructuredPlan(userId, question);
-                return ResponseEntity.ok(planResponse);
-            }
+            PlanResponseDto planResponse = coordinatorService.generateStructuredPlan(userId, question);
+            return ResponseEntity.ok(planResponse);
         } catch (Exception e) {
             log.error("Error generating plan for user: {}", userId, e);
             PlanResponseDto error = new PlanResponseDto();
