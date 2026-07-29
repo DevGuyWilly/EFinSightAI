@@ -81,8 +81,7 @@ public class VectorStoreService {
     }
 
     public List<ChunkSimilarity> searchSimilarWithScores(Long userId, float[] queryEmbedding, int topK) {
-        // Use Vertex AI Vector Search if available - 
-        // Not working yet - Vertex AI Vector Search - Not working yet
+        // Use Vertex AI Vector Search if available -
         if (vertexAIVectorStore != null) {
             try {
                 List<VertexAIVectorStoreService.VectorSearchResult> vertexResults = 

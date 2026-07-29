@@ -26,26 +26,32 @@ public class VertexAIVectorStoreService {
         this.config = config;
         
         // Validate configuration
-        if (config.getProjectId() == null || config.getProjectId().isEmpty() || 
+        if (config.getProjectId() == null || config.getProjectId().isEmpty() ||
             config.getProjectId().equals("your-gcp-project-id") ||
             config.getIndexId() == null || config.getIndexId().isEmpty() ||
-            config.getIndexEndpointId() == null || config.getIndexEndpointId().isEmpty()) {
+            config.getIndexEndpointId() == null || config.getIndexEndpointId().isEmpty() ||
+            config.getIndexEndpointDomain() == null || config.getIndexEndpointDomain().isEmpty()) {
             throw new IllegalStateException(
                 "Vertex AI configuration is incomplete. Please set vertex.ai.project-id, " +
-                "vertex.ai.index-id, and vertex.ai.index-endpoint-id in application.properties"
+                "vertex.ai.index-id, vertex.ai.index-endpoint-id, and vertex.ai.index-endpoint-domain " +
+                "in application.properties"
             );
         }
-        
+
         try {
-            String endpoint = String.format("%s-aiplatform.googleapis.com:443", config.getLocation());
+            // IndexServiceClient (admin ops: create/upsert/delete) uses the generic regional endpoint.
+            // MatchServiceClient (findNeighbors queries) must target the deployed index endpoint's own
+            // dedicated public domain instead - see: gcloud ai index-endpoints describe --format="value(publicEndpointDomainName)"
+            String regionalEndpoint = String.format("%s-aiplatform.googleapis.com:443", config.getLocation());
+            String matchEndpoint = String.format("%s:443", config.getIndexEndpointDomain());
             this.indexServiceClient = IndexServiceClient.create(
                 IndexServiceSettings.newBuilder()
-                    .setEndpoint(endpoint)
+                    .setEndpoint(regionalEndpoint)
                     .build()
             );
             this.matchServiceClient = MatchServiceClient.create(
                 MatchServiceSettings.newBuilder()
-                    .setEndpoint(endpoint)
+                    .setEndpoint(matchEndpoint)
                     .build()
             );
             log.info("Initialized Vertex AI Vector Search service for project: {}, location: {}", 

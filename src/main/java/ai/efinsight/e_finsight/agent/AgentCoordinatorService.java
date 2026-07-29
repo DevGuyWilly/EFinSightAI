@@ -56,6 +56,7 @@ public class AgentCoordinatorService {
     private PlanExecution executePlan(Long userId, String query) {
         log.info("Running ADK coordinator for user: {} with query: {}", userId, query);
 
+//        TODO: Concerns with topK, what if users have millions of transactions, top 15 won't cut it for context - Look into this
         List<RagService.RagContext> contexts = ragService.retrieveContext(userId, query, 15);
         List<CitationDto> citations = buildStructuredCitations(contexts);
         String contextText = ragService.buildContextString(contexts);
