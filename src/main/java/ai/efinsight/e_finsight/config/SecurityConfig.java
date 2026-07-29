@@ -33,6 +33,8 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/callback").permitAll() // TrueLayer callback
+                        .requestMatchers("/auth/connect-bank").permitAll() // token validated manually inside the controller, since this must be reachable via plain browser navigation
+                        .requestMatchers("/auth/success", "/auth/error").permitAll() // plain browser-rendered pages at the end of the TrueLayer flow
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);

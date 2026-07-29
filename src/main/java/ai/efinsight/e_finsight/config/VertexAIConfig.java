@@ -15,6 +15,7 @@ public class VertexAIConfig {
     private String indexId;
     private String indexEndpointId;
     private String indexDeploymentId;
+    private String indexEndpointDomain;
 
     public String getProjectId() {
         return projectId;
@@ -54,6 +55,14 @@ public class VertexAIConfig {
 
     public void setIndexDeploymentId(String indexDeploymentId) {
         this.indexDeploymentId = indexDeploymentId;
+    }
+
+    public String getIndexEndpointDomain() {
+        return indexEndpointDomain;
+    }
+
+    public void setIndexEndpointDomain(String indexEndpointDomain) {
+        this.indexEndpointDomain = indexEndpointDomain;
     }
 
     public String getIndexEndpoint() {

@@ -36,3 +36,6 @@ build/
 # Exclude actual application.properties with sensitive data
 # Keep application.properties.example as a template
 src/main/resources/application.properties
+
+# Local environment variables (e.g. GOOGLE_API_KEY for ADK agents)
+.env

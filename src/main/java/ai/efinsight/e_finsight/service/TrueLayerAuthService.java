@@ -40,7 +40,7 @@ public class TrueLayerAuthService {
     private final Map<String, String> stateStore = new ConcurrentHashMap<>();
 
     public String generateAndStoreState(String userId) {
-        String state = Base64.getEncoder()
+        String state = Base64.getUrlEncoder()
                 .encodeToString(UUID.randomUUID().toString().getBytes());
 
         stateStore.put(state, userId);
