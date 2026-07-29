@@ -20,36 +20,6 @@ PersonaFinSight connects to your bank accounts via TrueLayer, ingests your trans
   - **Investment Advisor** - Provides investment advice based on financial data
 - **💬 Natural Language Queries** - Ask questions in plain English and get comprehensive financial plans
 
-## 🏗️ Architecture
-
-```
-┌─────────────────────────────────────────────────────────┐
-│                    REST API Layer                        │
-│  /api/plan, /api/transactions, /api/auth/connect-bank   │
-└─────────────────────────────────────────────────────────┘
-                        ↓
-┌─────────────────────────────────────────────────────────┐
-│              Multi-Agent System                          │
-│  SpendingAnalyst → BudgetPlanner → InvestmentAdvisor     │
-│              (Coordinated by AgentCoordinatorService)   │
-└─────────────────────────────────────────────────────────┘
-                        ↓
-┌─────────────────────────────────────────────────────────┐
-│                  RAG Pipeline                            │
-│  Query → Embedding → Vector Search → Context Retrieval  │
-└─────────────────────────────────────────────────────────┘
-                        ↓
-┌─────────────────────────────────────────────────────────┐
-│              LLM Integration (Gemini/OpenAI)            │
-│  Chat Completion with Retry Logic & Error Handling      │
-└─────────────────────────────────────────────────────────┘
-                        ↓
-┌─────────────────────────────────────────────────────────┐
-│              Data Layer                                  │
-│  PostgreSQL (Cloud SQL) - Transactions, Chunks, Users  │
-└─────────────────────────────────────────────────────────┘
-```
-
 ## 🛠️ Tech Stack
 
 - **Backend**: Spring Boot 3.x
@@ -58,90 +28,45 @@ PersonaFinSight connects to your bank accounts via TrueLayer, ingests your trans
 - **AI/ML**:
   - **LLM**: Google Gemini 2.5 Flash (with OpenAI support)
   - **Embeddings**: Gemini Embedding 001
-  - **Vector Store**: PostgreSQL-based (cosine similarity)
+  - **Vector Store**: Google Vertex AI Vector Search (with a PostgreSQL cosine-similarity fallback when Vertex isn't configured)
 - **API Integration**: TrueLayer Banking API
-
-## 📁 Project Structure
-
-```
-src/main/java/ai/efinsight/e_finsight/
-├── agent/              # AI Agents & Coordinator
-│   ├── AgentCoordinatorService    # Orchestrates multiple agents
-│   ├── SpendingAnalyst            # Analyzes spending patterns
-│   ├── BudgetPlanner              # Creates budget recommendations
-│   ├── InvestmentAdvisor          # Provides investment advice
-│   └── LLMAgent                   # LLM client wrapper
-│
-├── rag/                # RAG Pipeline
-│   ├── RagService                 # Main RAG retrieval service
-│   ├── EmbeddingService            # Generates embeddings (Gemini/OpenAI)
-│   ├── VectorStoreService          # Vector similarity search
-│   └── ChunkingService             # Text chunking for transactions
-│
-├── llm/                # LLM Integration
-│   ├── LLMClient                   # Chat completion client
-│   └── LLMConfig                    # LLM configuration
-│
-├── service/            # Business Logic
-│   ├── TransactionService          # Transaction ingestion & processing
-│   ├── TrueLayerApiService         # TrueLayer API client
-│   └── TrueLayerAuthService        # TrueLayer OAuth handling
-│
-├── controller/         # REST Controllers
-│   ├── PlanController              # POST /api/plan
-│   ├── TransactionsController      # Transaction endpoints
-│   ├── AuthController              # User authentication
-│   └── TrueLayerAuthController     # Bank connection flow
-│
-├── model/              # JPA Entities
-│   ├── Transaction                 # Transaction data
-│   ├── TransactionChunk            # Chunked transaction text + embeddings
-│   ├── User                        # User accounts
-│   └── UserToken                   # TrueLayer OAuth tokens
-│
-├── repository/         # JPA Repositories
-├── dto/                # Data Transfer Objects
-├── config/             # Configuration classes
-├── security/           # JWT authentication
-└── exception/          # Global exception handling
-```
 
 ## 🚀 Getting Started
 
 ### Prerequisites
 
-- Java 17+
-- Maven 3.6+
-- PostgreSQL database (or Google Cloud SQL)
+- Java 21+
+- Maven wrapper is included (`./mvnw`) — no separate Maven install needed
+- A PostgreSQL database — see [`scripts/setup-cloud-sql.sh`](scripts/setup-cloud-sql.sh) to provision one on Google Cloud SQL
 - TrueLayer Developer Account
-- Gemini API Key (or OpenAI API Key)
+- Gemini API access — two separate credentials are needed, for two separate code paths:
+  - `GOOGLE_API_KEY` (or `GEMINI_API_KEY`) as an **environment variable** — used by the ADK agents' model resolution, independent of `application.properties`
+  - `llm.api-key` in `application.properties` — used by the embedding/chat HTTP client path
+- (Optional) A Google Cloud project with a Vertex AI Vector Search index deployed, for production-grade vector search — the app falls back to an in-database PostgreSQL similarity search if this isn't configured
+- (Optional, for testing the bank-connection OAuth flow on a real phone) [ngrok](https://ngrok.com/) or similar
 
 ### Configuration
 
-1. **Database Setup**
-   - Update `application.properties` with your PostgreSQL connection details
-   - Or set environment variables: `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USERNAME`, `DB_PASSWORD`
-
-2. **TrueLayer Setup**
-   - Get credentials from [TrueLayer Console](https://console.truelayer.com/)
-   - Update `truelayer.client-id` and `truelayer.client-secret` in `application.properties`
-   - Set redirect URI: `http://localhost:8080/callback`
-
-3. **LLM Configuration**
-   - Set `llm.provider=gemini` or `llm.provider=openai`
-   - Set `llm.api-key` with your API key
-   - Configure model names: `llm.chat-model` and `llm.embedding-model`
+1. **App config** — copy `src/main/resources/application.properties.example` to `application.properties` (gitignored, safe to put real values in) and fill in your database, TrueLayer, and LLM settings.
+2. **Environment variables** — create a `.env` file (gitignored) at the project root with `GOOGLE_API_KEY=<your-key>`. This must be loaded into your shell before running the app:
+   ```bash
+   set -a; source .env; set +a
+   ```
+3. **Database** — run `./scripts/setup-cloud-sql.sh` to provision a Cloud SQL Postgres instance and populate `application.properties` automatically, or point `spring.datasource.*` at any Postgres instance yourself.
+4. **TrueLayer** — get credentials from the [TrueLayer Console](https://console.truelayer.com/), set `truelayer.client-id` / `truelayer.client-secret`, and register your exact `truelayer.redirect-uri` value in the Console's Redirect URIs allowlist. Note the bank-connection flow itself lives at `/auth/connect-bank` and `/callback` (not under `/api/auth`).
+5. **Vertex AI Vector Search** (optional) — set the `vertex.ai.*` properties (see comments in `application.properties.example`); requires Application Default Credentials (`gcloud auth application-default login`) available to the app at startup, or the whole app will fail to boot rather than just falling back.
 
 ### Running the Application
 
 ```bash
-# Build the project
-mvn clean install
+# Load environment variables (GOOGLE_API_KEY, etc.)
+set -a; source .env; set +a
 
 # Run the application
-mvn spring-boot:run
+./mvnw spring-boot:run
 
-# Or run the JAR
+# Or build and run the JAR
+./mvnw clean package
 java -jar target/e-finsight-*.jar
 ```
 
@@ -226,31 +151,10 @@ The application will start on `http://localhost:8080`
 mvn clean package
 ```
 
-### Testing
-
-The application uses Spring Boot's embedded testing. Key components can be tested via:
-- Unit tests for services
-- Integration tests for controllers
-- Manual testing via API endpoints
-
 ## 📝 Configuration Files
 
 - `application.properties` - Main configuration (database, TrueLayer, LLM)
 - `pom.xml` - Maven dependencies
-
-## 🔐 Security
-
-- JWT-based authentication for API endpoints
-- OAuth 2.0 for bank account access
-- Secure token storage in database
-- Spring Security for endpoint protection
-
-## 📊 Database Schema
-
-- **users** - User accounts
-- **user_tokens** - TrueLayer OAuth tokens
-- **transactions** - Transaction data
-- **transaction_chunks** - Chunked transaction text with embeddings
 
 ## 🤝 Contributing
 
