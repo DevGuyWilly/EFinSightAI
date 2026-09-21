@@ -1,0 +1,51 @@
+# Render Blueprint for the EFinSight API.
+# Values marked `sync: false` are prompted for in the Render dashboard the first time and are never stored in git.
+services:
+  - type: web
+    name: efinsight-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    # Closest Render region to Supabase eu-west-1 (Ireland).
+    region: frankfurt
+    # `free` works but has 512 MB RAM (tight for Spring Boot + ADK) and sleeps after 15 min idle, so the first
+    # request after a quiet spell takes about a minute. Switch to `starter` if it runs out of memory or the cold
+    # starts get annoying.
+    plan: free
+    # No healthCheckPath on purpose: every endpoint except auth/callback needs a JWT, so Render just waits for the port.
+    envVars:
+      # --- database (Supabase session pooler) ---
+      - key: DB_HOST
+        sync: false            # e.g. aws-1-eu-west-1.pooler.supabase.com
+      - key: DB_PORT
+        value: "5432"
+      - key: DB_NAME
+        value: postgres
+      - key: DB_SSL_MODE
+        value: require
+      - key: DB_USERNAME
+        sync: false            # postgres.<your-project-ref>
+      - key: DB_PASSWORD
+        sync: false
+      # --- auth ---
+      - key: JWT_SECRET
+        generateValue: true
+      # --- TrueLayer ---
+      - key: TRUELAYER_CLIENT_ID
+        sync: false
+      - key: TRUELAYER_CLIENT_SECRET
+        sync: false
+      # https://<your-static-site>.onrender.com/callback, also added to the TrueLayer console allowlist
+      - key: TRUELAYER_REDIRECT_URI
+        sync: false
+      # --- Gemini (two separate code paths, same key) ---
+      - key: LLM_API_KEY
+        sync: false
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: LLM_PROVIDER
+        value: gemini
+      - key: LLM_CHAT_MODEL
+        value: gemini-3.5-flash
+      # OAuth redirects (/auth/success) must stay relative so the browser returns to the site it came from.
+      - key: SERVER_TOMCAT_USE_RELATIVE_REDIRECTS
+        value: "true"

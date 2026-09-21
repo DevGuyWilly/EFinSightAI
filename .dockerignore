@@ -1,0 +1,6 @@
+.git
+.idea
+target
+.env
+# never bake a local secrets file into an image; the Dockerfile builds from application.properties.example
+src/main/resources/application.properties
