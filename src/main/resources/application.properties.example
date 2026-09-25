@@ -48,17 +48,16 @@ truelayer.redirect-uri=http://localhost:8080/callback
 truelayer.token-uri=https://auth.truelayer.com/connect/token
 truelayer.api-base-url=https://api.truelayer.com
 
-# LLM Configuration (Gemini or OpenAI)
+# LLM Configuration
 # IMPORTANT: Set LLM_API_KEY environment variable in production
-# For OpenAI: set provider=openai
-# For Gemini: set provider=gemini
+# llm.provider / llm.api-key / llm.embedding-model select the embedding API (gemini or openai).
+# The ADK agents always use Gemini (key from the GOOGLE_API_KEY env var) with llm.chat-model.
 llm.provider=gemini
 llm.api-key=${LLM_API_KEY:your_llm_api_key_here}
 llm.gemini-api-url=https://generativelanguage.googleapis.com/v1beta
 llm.embedding-model=gemini-embedding-001
 llm.chat-model=gemini-2.5-flash
-# For OpenAI: use "gpt-4o-mini" or "gpt-4"
-# For Gemini v1beta: 
+# llm.chat-model options (Gemini):
 #   - "gemini-2.5-flash" (recommended - faster, less likely to be overloaded)
 #   - "gemini-2.5-pro" (more capable but may be overloaded)
 #   - "gemini-1.5-flash-latest" or "gemini-1.5-pro-latest" (older models)

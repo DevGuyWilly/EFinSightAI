@@ -25,7 +25,7 @@ public class RagService {
         log.info("Retrieving context for query: '{}' (user: {}, topK: {})", query, userId, topK);
 
         try {
-            float[] queryEmbedding = embeddingService.generateEmbedding(query);
+            float[] queryEmbedding = embeddingService.generateQueryEmbedding(query);
             if (queryEmbedding == null) {
                 log.warn("Failed to generate embedding for query");
                 return new ArrayList<>();

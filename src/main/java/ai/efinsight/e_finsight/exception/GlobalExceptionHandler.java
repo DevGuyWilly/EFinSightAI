@@ -45,6 +45,14 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.NOT_ACCEPTABLE).headers(headers).body(errorResponse);
     }
 
+    // More specific than the RuntimeException handler below, so it wins for this exception
+    @ExceptionHandler(ConversationNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleConversationNotFound(ConversationNotFoundException ex) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).headers(headers).body(new ErrorResponse("Conversation not found"));
+    }
+
     @ExceptionHandler(RuntimeException.class)
     public ResponseEntity<ErrorResponse> handleRuntimeException(RuntimeException ex) {
         ErrorResponse errorResponse = new ErrorResponse(ex.getMessage());

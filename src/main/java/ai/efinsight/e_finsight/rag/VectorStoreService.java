@@ -12,6 +12,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 public class VectorStoreService {
@@ -120,70 +122,28 @@ public class VectorStoreService {
             }
         }
         
-        // Fallback to PostgreSQL in-memory search
-        List<TransactionChunk> allChunks = chunkRepository.findEmbeddedChunksByUserId(userId);
-        
-        if (allChunks.isEmpty()) {
-            return new ArrayList<>();
-        }
+        // Fallback: exact cosine search inside PostgreSQL via pgvector
+        List<TransactionChunkRepository.ChunkMatch> matches = chunkRepository.findNearestByCosine(
+                userId, embeddingService.embeddingToString(queryEmbedding), topK);
 
-        List<ChunkSimilarity> similarities = new ArrayList<>();
-        for (TransactionChunk chunk : allChunks) {
-            float[] chunkEmbedding = embeddingService.stringToEmbedding(chunk.getEmbedding());
-            if (chunkEmbedding != null && !isZeroVector(chunkEmbedding)) {
-                // Calculate the cosine similarity between the query embedding and the chunk embedding
-                double similarity = cosineSimilarity(queryEmbedding, chunkEmbedding);
-                // Add the chunk and similarity to the list of similarities
-                similarities.add(new ChunkSimilarity(chunk, similarity));
-            }
-        }
+        Map<Long, TransactionChunk> chunksById = chunkRepository
+                .findAllById(matches.stream().map(TransactionChunkRepository.ChunkMatch::getChunkId).toList())
+                .stream()
+                .collect(Collectors.toMap(TransactionChunk::getId, Function.identity()));
 
-        similarities.sort((a, b) -> Double.compare(b.similarity, a.similarity));
-        
         List<ChunkSimilarity> results = new ArrayList<>();
-        for (int i = 0; i < Math.min(topK, similarities.size()); i++) {
-            results.add(similarities.get(i));
-        }
-
-        log.info("Found {} similar chunks via PostgreSQL for user: {} (top similarity: {})", 
-            results.size(), userId, 
-            results.isEmpty() ? 0.0 : results.get(0).similarity);
-        // Return the list of similar chunks
-        return results;
-    }
-
-    private boolean isZeroVector(float[] embedding) {
-        if (embedding == null || embedding.length == 0) {
-            return true;
-        }
-        for (float value : embedding) {
-            if (Math.abs(value) > 0.0001f) {
-                return false;
+        for (TransactionChunkRepository.ChunkMatch match : matches) {
+            TransactionChunk chunk = chunksById.get(match.getChunkId());
+            // Zero vectors have no direction, so pgvector reports NaN similarity; they carry no signal
+            if (chunk != null && match.getSimilarity() != null && !match.getSimilarity().isNaN()) {
+                results.add(new ChunkSimilarity(chunk, match.getSimilarity()));
             }
         }
-        return true;
-    }
 
-    private double cosineSimilarity(float[] a, float[] b) {
-        if (a.length != b.length) {
-            return 0.0;
-        }
-
-        double dotProduct = 0.0;
-        double normA = 0.0;
-        double normB = 0.0;
-
-        for (int i = 0; i < a.length; i++) {
-            dotProduct += a[i] * b[i];
-            normA += a[i] * a[i];
-            normB += b[i] * b[i];
-        }
-
-        if (normA == 0.0 || normB == 0.0) {
-            return 0.0;
-        }
-
-        return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+        log.info("Found {} similar chunks via pgvector for user: {} (top similarity: {})",
+            results.size(), userId,
+            results.isEmpty() ? 0.0 : results.get(0).similarity);
+        return results;
     }
 
     @Transactional

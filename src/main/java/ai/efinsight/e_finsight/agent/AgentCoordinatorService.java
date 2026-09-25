@@ -1,11 +1,15 @@
 package ai.efinsight.e_finsight.agent;
 
 import ai.efinsight.e_finsight.adk.AdkCoordinatorAgentNative;
+import ai.efinsight.e_finsight.adk.QuestionRewriter;
 import ai.efinsight.e_finsight.dto.CitationDto;
 import ai.efinsight.e_finsight.dto.PlanResponseDto;
+import ai.efinsight.e_finsight.model.Conversation;
+import ai.efinsight.e_finsight.model.ConversationMessage;
 import ai.efinsight.e_finsight.model.Transaction;
 import ai.efinsight.e_finsight.rag.RagService;
 import ai.efinsight.e_finsight.repository.TransactionRepository;
+import ai.efinsight.e_finsight.service.ConversationService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -20,7 +24,14 @@ import java.util.regex.Pattern;
 public class AgentCoordinatorService {
     private static final Logger log = LoggerFactory.getLogger(AgentCoordinatorService.class);
 
+    // Earlier turns given to the agents as conversation history (10 questions and their answers)
+    static final int HISTORY_MESSAGES = 20;
+    // Long earlier answers are cut to this many characters in the history to bound prompt size
+    static final int MAX_HISTORY_ANSWER_CHARS = 1500;
+
     private final AdkCoordinatorAgentNative adkCoordinatorAgent;
+    private final QuestionRewriter questionRewriter;
+    private final ConversationService conversationService;
     private final RagService ragService;
     private final TransactionRepository transactionRepository;
 
@@ -31,16 +42,31 @@ public class AgentCoordinatorService {
 
     public AgentCoordinatorService(
             AdkCoordinatorAgentNative adkCoordinatorAgent,
+            QuestionRewriter questionRewriter,
+            ConversationService conversationService,
             RagService ragService,
             TransactionRepository transactionRepository) {
         this.adkCoordinatorAgent = adkCoordinatorAgent;
+        this.questionRewriter = questionRewriter;
+        this.conversationService = conversationService;
         this.ragService = ragService;
         this.transactionRepository = transactionRepository;
     }
 
-    // Generate a structured plan response DTO for the user
-    public PlanResponseDto generateStructuredPlan(Long userId, String query) {
-        PlanExecution execution = executePlan(userId, query);
+    /**
+     * Answers a question within a conversation and saves the turn. With a null conversationId a new conversation
+     * is created (only once the answer succeeds); otherwise it must belong to the user, or
+     * ConversationNotFoundException is thrown before any AI work is done.
+     */
+    public PlanResponseDto generateStructuredPlan(Long userId, String query, Long conversationId) {
+        Conversation conversation = conversationId != null
+            ? conversationService.requireOwned(userId, conversationId)
+            : null;
+        List<ConversationMessage> history = conversation != null
+            ? conversationService.recentMessages(conversation.getId(), HISTORY_MESSAGES)
+            : List.of();
+
+        PlanExecution execution = executePlan(userId, query, history);
         Map<String, String> agentResponses = execution.result().agentResponses();
 
         PlanResponseDto.PlanSections sections = new PlanResponseDto.PlanSections(
@@ -49,31 +75,50 @@ public class AgentCoordinatorService {
             agentResponses.get("investment_advice")
         );
 
-        return new PlanResponseDto(true, query, execution.result().summary(), sections, execution.citations(), agentResponses);
+        PlanResponseDto response = new PlanResponseDto(true, query, execution.result().summary(), sections, execution.citations(), agentResponses);
+        Conversation saved = conversationService.recordTurn(userId, conversation, query, response);
+        response.setConversationId(saved.getId());
+        response.setConversationTitle(saved.getTitle());
+        return response;
     }
 
     // Retrieve RAG context once, then run the ADK root coordinator agent, which decides which specialist(s) to delegate to
-    private PlanExecution executePlan(Long userId, String query) {
-        log.info("Running ADK coordinator for user: {} with query: {}", userId, query);
+    private PlanExecution executePlan(Long userId, String query, List<ConversationMessage> history) {
+        log.info("Running ADK coordinator for user: {} with query: {} ({} earlier messages)", userId, query, history.size());
 
-//        TODO: Concerns with topK, what if users have millions of transactions, top 15 won't cut it for context - Look into this
-        List<RagService.RagContext> contexts = ragService.retrieveContext(userId, query, 15);
+        String historyText = formatHistory(history);
+        // A follow-up ("what about last month?") embedded on its own retrieves the wrong transactions
+        String retrievalQuery = history.isEmpty() ? query : questionRewriter.rewrite(userId, historyText, query);
+
+        // RAG supplies a top-15 sample of specific, relevant transactions; totals, rankings and trends over the full
+        // history come from the specialists' TransactionAnalyticsTools instead, so topK doesn't need to scale with it
+        List<RagService.RagContext> contexts = ragService.retrieveContext(userId, retrievalQuery, 15);
         List<CitationDto> citations = buildStructuredCitations(contexts);
         String contextText = ragService.buildContextString(contexts);
 
-        AdkCoordinatorAgentNative.CoordinatorResult result;
-        try {
-            result = adkCoordinatorAgent.run(userId, query, contextText).get();
-        } catch (Exception e) {
-            log.error("Error running ADK coordinator", e);
-            result = new AdkCoordinatorAgentNative.CoordinatorResult(
-                "Unable to generate a plan at this time. Error: " + e.getMessage(), Map.of());
-        }
+        // Throws PlanGenerationException on failure, so a failed run is never returned as a successful plan
+        AdkCoordinatorAgentNative.CoordinatorResult result = adkCoordinatorAgent.run(userId, query, contextText, historyText);
 
         return new PlanExecution(result, citations);
     }
 
     private record PlanExecution(AdkCoordinatorAgentNative.CoordinatorResult result, List<CitationDto> citations) {
+    }
+
+    static String formatHistory(List<ConversationMessage> history) {
+        if (history.isEmpty()) {
+            return AdkCoordinatorAgentNative.NO_HISTORY;
+        }
+        StringBuilder sb = new StringBuilder();
+        for (ConversationMessage message : history) {
+            boolean user = message.getRole() == ConversationMessage.Role.USER;
+            String content = message.getContent();
+            if (!user && content.length() > MAX_HISTORY_ANSWER_CHARS) {
+                content = content.substring(0, MAX_HISTORY_ANSWER_CHARS) + "…";
+            }
+            sb.append(user ? "User: " : "Assistant: ").append(content).append("\n\n");
+        }
+        return sb.toString().strip();
     }
 
     // Build structured citations from RAG contexts

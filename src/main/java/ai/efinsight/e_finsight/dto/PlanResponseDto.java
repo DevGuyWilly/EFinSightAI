@@ -13,6 +13,9 @@ public class PlanResponseDto {
     private List<CitationDto> citations;
     private Map<String, String> agentResponses;
     private String error;
+    // The conversation this answer was saved to (a new one when the request didn't name one)
+    private Long conversationId;
+    private String conversationTitle;
 
     public PlanResponseDto() {
     }
@@ -75,6 +78,22 @@ public class PlanResponseDto {
 
     public void setAgentResponses(Map<String, String> agentResponses) {
         this.agentResponses = agentResponses;
+    }
+
+    public Long getConversationId() {
+        return conversationId;
+    }
+
+    public void setConversationId(Long conversationId) {
+        this.conversationId = conversationId;
+    }
+
+    public String getConversationTitle() {
+        return conversationTitle;
+    }
+
+    public void setConversationTitle(String conversationTitle) {
+        this.conversationTitle = conversationTitle;
     }
 
     public String getError() {

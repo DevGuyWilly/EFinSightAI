@@ -1,10 +1,12 @@
 package ai.efinsight.e_finsight.model;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.ColumnTransformer;
+
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "transaction_chunks")
+@Table(name = "transaction_chunks", indexes = @Index(name = "idx_transaction_chunks_user_id", columnList = "user_id"))
 public class TransactionChunk {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -19,8 +21,11 @@ public class TransactionChunk {
     @Column(name = "chunk_text", columnDefinition = "TEXT", nullable = false)
     private String chunkText;
 
-    @Column(name = "embedding", columnDefinition = "TEXT")
-    private String embedding; // JSON array of floats as string
+    // pgvector column (see PgVectorSchemaInitializer), mapped as its text form "[0.1,0.2,...]"; the cast lets
+    // Postgres accept the string parameter the JDBC driver sends
+    @Column(name = "embedding", columnDefinition = "vector")
+    @ColumnTransformer(write = "CAST(? AS vector)")
+    private String embedding;
 
     @Column(name = "chunk_index")
     private Integer chunkIndex; // If transaction is split into multiple chunks

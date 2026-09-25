@@ -7,6 +7,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.ArrayList;
@@ -18,40 +19,84 @@ import java.util.Map;
 public class EmbeddingService {
     private static final Logger log = LoggerFactory.getLogger(EmbeddingService.class);
 
+    // Gemini's batchEmbedContents rejects batches larger than 100 requests
+    static final int MAX_BATCH_SIZE = 100;
+    private static final int MAX_ATTEMPTS = 3;
+
     private final LLMConfig config;
     private final RestTemplate restTemplate = new RestTemplate();
+    // Base delay for retry backoff; package-private so tests can shorten it
+    long retryBaseDelayMs = 1000;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public EmbeddingService(LLMConfig config) {
         this.config = config;
     }
 
-    public float[] generateEmbedding(String text) {
-        List<String> texts = new ArrayList<>();
-        texts.add(text);
-        // Generate embeddings for the list of texts
-        List<float[]> embeddings = generateEmbeddings(texts);
+    // Gemini embeds asymmetrically: stored content and search queries must use matching task types, or retrieval
+    // quality drops. OpenAI embeddings have no task type, so this only affects the Gemini path.
+    public enum TaskType {
+        RETRIEVAL_DOCUMENT,
+        RETRIEVAL_QUERY
+    }
+
+    // Embed a user's search query, for comparison against stored document embeddings
+    public float[] generateQueryEmbedding(String query) {
+        List<float[]> embeddings = generateEmbeddings(List.of(query), TaskType.RETRIEVAL_QUERY);
         // If the embeddings are empty, return null
         return embeddings.isEmpty() ? null : embeddings.get(0);
     }
 
-    // Generate embeddings for a list of texts- using either OpenAI or Gemini
+    // Embed content to be stored and searched (e.g. transaction chunks) - using either OpenAI or Gemini
     public List<float[]> generateEmbeddings(List<String> texts) {
+        return generateEmbeddings(texts, TaskType.RETRIEVAL_DOCUMENT);
+    }
+
+    // Embeds any number of texts in order, making one API call per MAX_BATCH_SIZE texts
+    private List<float[]> generateEmbeddings(List<String> texts, TaskType taskType) {
         if (texts == null || texts.isEmpty()) {
             return new ArrayList<>();
         }
 
         try {
-            if ("openai".equalsIgnoreCase(config.getProvider())) {
-                return generateOpenAIEmbeddings(texts);
-            } else if ("gemini".equalsIgnoreCase(config.getProvider())) {
-                return generateGeminiEmbeddings(texts);
-            } else {
-                throw new RuntimeException("Unsupported LLM provider: " + config.getProvider());
+            List<float[]> embeddings = new ArrayList<>(texts.size());
+            for (int start = 0; start < texts.size(); start += MAX_BATCH_SIZE) {
+                List<String> batch = texts.subList(start, Math.min(start + MAX_BATCH_SIZE, texts.size()));
+                List<float[]> batchEmbeddings;
+                if ("openai".equalsIgnoreCase(config.getProvider())) {
+                    batchEmbeddings = generateOpenAIEmbeddings(batch);
+                } else if ("gemini".equalsIgnoreCase(config.getProvider())) {
+                    batchEmbeddings = generateGeminiEmbeddings(batch, taskType);
+                } else {
+                    throw new RuntimeException("Unsupported LLM provider: " + config.getProvider());
+                }
+                if (batchEmbeddings.size() != batch.size()) {
+                    throw new RuntimeException("Expected " + batch.size() + " embeddings but got " + batchEmbeddings.size());
+                }
+                embeddings.addAll(batchEmbeddings);
             }
+            return embeddings;
         } catch (Exception e) {
             log.error("Error generating embeddings", e);
             throw new RuntimeException("Failed to generate embeddings: " + e.getMessage(), e);
+        }
+    }
+
+    // POSTs with retries on rate limiting (429) and transient server errors (500/503), backing off exponentially
+    private ResponseEntity<String> postWithRetry(String url, HttpEntity<?> request) throws InterruptedException {
+        for (int attempt = 1; ; attempt++) {
+            try {
+                return restTemplate.exchange(url, HttpMethod.POST, request, String.class);
+            } catch (HttpStatusCodeException e) {
+                int status = e.getStatusCode().value();
+                boolean retryable = status == 429 || status == 500 || status == 503;
+                if (!retryable || attempt >= MAX_ATTEMPTS) {
+                    throw e;
+                }
+                long delayMs = retryBaseDelayMs * (1L << (attempt - 1));
+                log.warn("Embedding API returned {} (attempt {}/{}), retrying in {}ms", status, attempt, MAX_ATTEMPTS, delayMs);
+                Thread.sleep(delayMs);
+            }
         }
     }
 
@@ -70,7 +115,7 @@ public class EmbeddingService {
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
 
         try {
-            ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.POST, request, String.class);
+            ResponseEntity<String> response = postWithRetry(url, request);
 
             if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
                 JsonNode jsonNode = objectMapper.readTree(response.getBody());
@@ -97,7 +142,8 @@ public class EmbeddingService {
         }
     }
 
-    private List<float[]> generateGeminiEmbeddings(List<String> texts) {
+    // One batchEmbedContents call for up to MAX_BATCH_SIZE texts; embeddings come back in request order
+    private List<float[]> generateGeminiEmbeddings(List<String> texts, TaskType taskType) {
         String baseUrl = config.getGeminiApiUrl() != null 
             ? config.getGeminiApiUrl() 
             : "https://generativelanguage.googleapis.com/v1beta";
@@ -111,66 +157,55 @@ public class EmbeddingService {
             apiUrl = baseUrl.replace("/v1", "/v1beta");
         }
         
-        String url = apiUrl + "/models/" + embeddingModel + ":embedContent";
+        String url = apiUrl + "/models/" + embeddingModel + ":batchEmbedContents";
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
+        // Header rather than ?key= so the key never ends up in logged URLs
+        headers.set("x-goog-api-key", config.getApiKey());
 
-        List<float[]> embeddings = new ArrayList<>();
-        
+        List<Map<String, Object>> requests = new ArrayList<>(texts.size());
         for (String text : texts) {
-            try {
-                // Gemini embedding API format
-                Map<String, Object> body = new HashMap<>();
-                Map<String, Object> content = new HashMap<>();
-                List<Map<String, String>> parts = new ArrayList<>();
-                Map<String, String> part = new HashMap<>();
-                part.put("text", text);
-                parts.add(part);
-                content.put("parts", parts);
-                body.put("model", "models/" + embeddingModel);
-                body.put("content", content);
-                body.put("taskType", "RETRIEVAL_DOCUMENT"); // Optional but recommended
-
-                String fullUrl = url + "?key=" + config.getApiKey();
-                log.debug("Calling Gemini embedding API: {} with model: {}", fullUrl, embeddingModel);
-                HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
-
-                ResponseEntity<String> response = restTemplate.exchange(fullUrl, HttpMethod.POST, request, String.class);
-
-                if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
-                    JsonNode jsonNode = objectMapper.readTree(response.getBody());
-                    
-                    if (jsonNode.has("embedding") && jsonNode.get("embedding").has("values")) {
-                        JsonNode embedding = jsonNode.get("embedding").get("values");
-                        
-                        float[] embeddingArray = new float[embedding.size()];
-                        for (int i = 0; i < embedding.size(); i++) {
-                            embeddingArray[i] = (float) embedding.get(i).asDouble();
-                        }
-                        embeddings.add(embeddingArray);
-                        log.debug("Successfully generated embedding (dimension: {})", embeddingArray.length);
-                    } else {
-                        log.error("Gemini API response missing embedding field. Response: {}", response.getBody());
-                        throw new RuntimeException("Invalid response structure from Gemini API");
-                    }
-                } else {
-                    log.error("Gemini API returned: {} for text: {}. Response body: {}", 
-                        response.getStatusCode(), 
-                        text.substring(0, Math.min(50, text.length())),
-                        response.getBody());
-                    throw new RuntimeException("Gemini API returned status: " + response.getStatusCode());
-                }
-            } catch (Exception e) {
-                log.error("Error generating embedding for text: {}. Error: {}", 
-                    text.substring(0, Math.min(100, text.length())), 
-                    e.getMessage(), e);
-                throw new RuntimeException("Failed to generate embedding: " + e.getMessage(), e);
-            }
+            requests.add(Map.of(
+                    "model", "models/" + embeddingModel,
+                    "content", Map.of("parts", List.of(Map.of("text", text))),
+                    "taskType", taskType.name()));
         }
+        HttpEntity<Map<String, Object>> request = new HttpEntity<>(Map.of("requests", requests), headers);
 
-        log.info("Generated {} embeddings using Gemini", embeddings.size());
-        return embeddings;
+        try {
+            ResponseEntity<String> response = postWithRetry(url, request);
+
+            if (response.getStatusCode() != HttpStatus.OK || response.getBody() == null) {
+                log.error("Gemini API returned: {}. Response body: {}", response.getStatusCode(), response.getBody());
+                throw new RuntimeException("Gemini API returned status: " + response.getStatusCode());
+            }
+
+            JsonNode embeddingsNode = objectMapper.readTree(response.getBody()).get("embeddings");
+            if (embeddingsNode == null || !embeddingsNode.isArray()) {
+                log.error("Gemini API response missing embeddings field. Response: {}", response.getBody());
+                throw new RuntimeException("Invalid response structure from Gemini API");
+            }
+
+            List<float[]> embeddings = new ArrayList<>(embeddingsNode.size());
+            for (JsonNode embedding : embeddingsNode) {
+                JsonNode values = embedding.get("values");
+                float[] embeddingArray = new float[values.size()];
+                for (int i = 0; i < values.size(); i++) {
+                    embeddingArray[i] = (float) values.get(i).asDouble();
+                }
+                embeddings.add(embeddingArray);
+            }
+
+            log.info("Generated {} embeddings using Gemini", embeddings.size());
+            return embeddings;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("Interrupted while retrying Gemini embedding call", e);
+        } catch (Exception e) {
+            log.error("Error generating {} Gemini embeddings: {}", texts.size(), e.getMessage(), e);
+            throw new RuntimeException("Failed to generate embeddings: " + e.getMessage(), e);
+        }
     }
 
     public String embeddingToString(float[] embedding) {
@@ -184,24 +219,6 @@ public class EmbeddingService {
         }
         sb.append("]");
         return sb.toString();
-    }
-
-    public float[] stringToEmbedding(String embeddingStr) {
-        if (embeddingStr == null || embeddingStr.isEmpty()) {
-            return null;
-        }
-        try {
-            String cleaned = embeddingStr.trim().replaceAll("^\\[|\\]$", "");
-            String[] parts = cleaned.split(",");
-            float[] embedding = new float[parts.length];
-            for (int i = 0; i < parts.length; i++) {
-                embedding[i] = Float.parseFloat(parts[i].trim());
-            }
-            return embedding;
-        } catch (Exception e) {
-            log.error("Error parsing embedding string", e);
-            return null;
-        }
     }
 }
 

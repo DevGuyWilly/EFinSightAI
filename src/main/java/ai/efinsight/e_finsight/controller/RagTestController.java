@@ -51,7 +51,7 @@ public class RagTestController {
 
             log.info("Testing RAG retrieval for query: '{}' (user: {}, topK: {})", query, userId, topK);
 
-            float[] queryEmbedding = embeddingService.generateEmbedding(query);
+            float[] queryEmbedding = embeddingService.generateQueryEmbedding(query);
             if (queryEmbedding == null) {
                 Map<String, String> error = new HashMap<>();
                 error.put("error", "Failed to generate embedding for query");

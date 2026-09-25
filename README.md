@@ -26,9 +26,9 @@ PersonaFinSight connects to your bank accounts via TrueLayer, ingests your trans
 - **Database**: PostgreSQL (Google Cloud SQL)
 - **Authentication**: JWT-based auth + TrueLayer OAuth
 - **AI/ML**:
-  - **LLM**: Google Gemini 2.5 Flash (with OpenAI support)
+  - **LLM**: Google Gemini via Google ADK agents (model set by `llm.chat-model`)
   - **Embeddings**: Gemini Embedding 001
-  - **Vector Store**: Google Vertex AI Vector Search (with a PostgreSQL cosine-similarity fallback when Vertex isn't configured)
+  - **Vector Store**: PostgreSQL with pgvector (exact cosine search in the database), or Google Vertex AI Vector Search when configured
 - **API Integration**: TrueLayer Banking API
 
 ## 🚀 Getting Started
@@ -37,12 +37,12 @@ PersonaFinSight connects to your bank accounts via TrueLayer, ingests your trans
 
 - Java 21+
 - Maven wrapper is included (`./mvnw`) — no separate Maven install needed
-- A PostgreSQL database — see [`scripts/setup-cloud-sql.sh`](scripts/setup-cloud-sql.sh) to provision one on Google Cloud SQL
+- A PostgreSQL database with the [pgvector](https://github.com/pgvector/pgvector) extension available (Supabase and Cloud SQL include it; locally: `brew install pgvector`) — the app runs `CREATE EXTENSION IF NOT EXISTS vector` at startup and won't boot without it. See [`scripts/setup-cloud-sql.sh`](scripts/setup-cloud-sql.sh) to provision one on Google Cloud SQL
 - TrueLayer Developer Account
 - Gemini API access — two separate credentials are needed, for two separate code paths:
   - `GOOGLE_API_KEY` (or `GEMINI_API_KEY`) as an **environment variable** — used by the ADK agents' model resolution, independent of `application.properties`
-  - `llm.api-key` in `application.properties` — used by the embedding/chat HTTP client path
-- (Optional) A Google Cloud project with a Vertex AI Vector Search index deployed, for production-grade vector search — the app falls back to an in-database PostgreSQL similarity search if this isn't configured
+  - `llm.api-key` in `application.properties` — used by the embedding HTTP client path (Gemini or OpenAI, per `llm.provider`)
+- (Optional) A Google Cloud project with a Vertex AI Vector Search index deployed, for production-grade vector search — the app uses pgvector search in PostgreSQL if this isn't configured
 - (Optional, for testing the bank-connection OAuth flow on a real phone) [ngrok](https://ngrok.com/) or similar
 
 ### Configuration
@@ -92,25 +92,36 @@ The application will start on `http://localhost:8080`
 
 ### Financial Planning
 
-- **POST** `/api/plan` - Generate comprehensive financial plan
+- **POST** `/api/plan` - Ask the advisor. Omit `conversationId` to start a new conversation; send it to ask a follow-up (the agents see the last 10 turns). Only successful answers are saved.
   ```json
   {
-    "question": "Where am I spending the most money?"
+    "question": "What about last month?",
+    "conversationId": 42
   }
   ```
-  
-  **Response:**
+
+  **Response** (errors: `400` blank/too long, `404` unknown or someone else's conversation, `503` the AI failed, all with `success: false` and `error`):
   ```json
   {
     "success": true,
-    "plan": "# Financial Plan\n\n## Spending Analysis\n...",
-    "citations": [
-      "Transaction ID: 1 - Transaction: LOTHIAN BUSES...",
-      ...
-    ],
-    "question": "Where am I spending the most money?"
+    "question": "What about last month?",
+    "summary": "…",
+    "sections": { "spendingAnalysis": "…", "budgetRecommendations": null, "investmentAdvice": null },
+    "citations": [{ "transactionId": 1, "merchant": "TESCO", "amount": "-12.40", "currency": "GBP", "category": "PURCHASE", "date": "…", "description": "…" }],
+    "agentResponses": { "spending_analysis": "…" },
+    "conversationId": 42,
+    "conversationTitle": "Where am I spending the most money?"
   }
   ```
+
+### Conversations
+
+- **GET** `/api/conversations` - `{ "conversations": [{ id, title, createdAt, updatedAt, messageCount }] }`, most recently used first
+- **GET** `/api/conversations/{id}` - `{ id, title, createdAt, updatedAt, messages: [{ id, role: "user" | "assistant", content, createdAt, response? }] }`; assistant messages carry the full answer in `response`
+- **DELETE** `/api/conversations/{id}` - delete one conversation (`204`)
+- **DELETE** `/api/conversations` - delete all of the user's conversations (`204`)
+
+Conversations belong to one user: another user's id behaves exactly like a missing one (`404`).
 
 ## 🔄 How It Works
 
