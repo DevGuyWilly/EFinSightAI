@@ -1,5 +1,6 @@
 package ai.efinsight.e_finsight.service;
 
+import ai.efinsight.e_finsight.security.TestTokenCipherConfig;
 import ai.efinsight.e_finsight.dto.CitationDto;
 import ai.efinsight.e_finsight.dto.ConversationDetailDto;
 import ai.efinsight.e_finsight.dto.ConversationSummaryDto;
@@ -37,7 +38,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
         "spring.jpa.hibernate.ddl-auto=create-drop"
 })
 @ImportAutoConfiguration(JacksonAutoConfiguration.class)
-@Import(ConversationService.class)
+@Import({ConversationService.class, TestTokenCipherConfig.class})
 class ConversationServiceTest {
     private static final long USER = 1L;
     private static final long OTHER_USER = 2L;

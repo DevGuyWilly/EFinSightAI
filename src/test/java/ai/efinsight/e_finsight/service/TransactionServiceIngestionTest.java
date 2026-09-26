@@ -1,5 +1,6 @@
 package ai.efinsight.e_finsight.service;
 
+import ai.efinsight.e_finsight.security.TestTokenCipherConfig;
 import ai.efinsight.e_finsight.dto.TrueLayerAccountDto;
 import ai.efinsight.e_finsight.dto.TrueLayerTransactionDto;
 import ai.efinsight.e_finsight.llm.LLMConfig;
@@ -60,7 +61,7 @@ import static org.mockito.Mockito.when;
         "llm.api-key=test-key",
         "llm.embedding-model=gemini-embedding-001"
 })
-@Import({TransactionService.class, ChunkingService.class, EmbeddingService.class, VectorStoreService.class, LLMConfig.class})
+@Import({TransactionService.class, ChunkingService.class, EmbeddingService.class, VectorStoreService.class, LLMConfig.class, TestTokenCipherConfig.class})
 class TransactionServiceIngestionTest {
     private static final long USER = 1L;
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();

@@ -1,5 +1,6 @@
 package ai.efinsight.e_finsight.model;
 
+import ai.efinsight.e_finsight.security.EncryptedStringConverter;
 import jakarta.persistence.*;
 import lombok.Data;
 
@@ -16,11 +17,14 @@ public class UserToken {
     @Column(unique = true, nullable = false)
     private String userId;
 
+    // Encrypted at rest (AES-GCM, see TokenCipher); the entity always holds the plaintext
     @Column(columnDefinition = "TEXT")
-    private String accessToken; // TODO: Encrypt
+    @Convert(converter = EncryptedStringConverter.class)
+    private String accessToken;
 
     @Column(columnDefinition = "TEXT")
-    private String refreshToken; // TODO: Encrypt
+    @Convert(converter = EncryptedStringConverter.class)
+    private String refreshToken;
 
     private LocalDateTime consentCreatedAt;
     private Integer expiresIn;

@@ -7,6 +7,7 @@ import ai.efinsight.e_finsight.rag.VectorStoreService;
 import ai.efinsight.e_finsight.rag.VectorStoreService.ChunkSimilarity;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
@@ -16,8 +17,11 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+// Debug endpoints for inspecting RAG retrieval. Off unless app.debug-endpoints.enabled=true, so they don't exist
+// in production by default.
 @RestController
 @RequestMapping("/api/rag/test")
+@ConditionalOnProperty(name = "app.debug-endpoints.enabled", havingValue = "true")
 public class RagTestController {
     private static final Logger log = LoggerFactory.getLogger(RagTestController.class);
 

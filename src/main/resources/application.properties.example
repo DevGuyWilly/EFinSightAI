@@ -38,6 +38,14 @@ spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.PostgreSQLDialect
 jwt.secret=${JWT_SECRET:your-super-secret-jwt-key-change-this-in-production-min-32-chars}
 jwt.expiration=86400000
 
+# Encryption of stored TrueLayer tokens (AES-256-GCM). Required: the app won't start without it.
+# Read from the TOKEN_ENCRYPTION_KEY environment variable (or set it here). Generate: openssl rand -base64 32
+# Use the SAME value everywhere the app shares this database, and keep it: changing it makes stored tokens unreadable.
+# TOKEN_ENCRYPTION_KEY=
+
+# RAG debug endpoints (/api/rag/test/**). Leave off in production.
+app.debug-endpoints.enabled=false
+
 # TrueLayer Configuration
 # Get these values from your TrueLayer Developer Console: https://console.truelayer.com/
 # IMPORTANT: Set these as environment variables in production

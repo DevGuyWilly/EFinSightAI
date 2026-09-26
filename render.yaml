@@ -29,6 +29,10 @@ services:
       # --- auth ---
       - key: JWT_SECRET
         generateValue: true
+      # Encrypts stored TrueLayer tokens. Must match the value used by anything else on the same database (e.g. your
+      # local app on Supabase), and must never change once tokens are stored. Generate: openssl rand -base64 32
+      - key: TOKEN_ENCRYPTION_KEY
+        sync: false
       # --- TrueLayer ---
       - key: TRUELAYER_CLIENT_ID
         sync: false

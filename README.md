@@ -48,7 +48,7 @@ PersonaFinSight connects to your bank accounts via TrueLayer, ingests your trans
 ### Configuration
 
 1. **App config** — copy `src/main/resources/application.properties.example` to `application.properties` (gitignored, safe to put real values in) and fill in your database, TrueLayer, and LLM settings.
-2. **Environment variables** — create a `.env` file (gitignored) at the project root with `GOOGLE_API_KEY=<your-key>`. This must be loaded into your shell before running the app:
+2. **Environment variables** — create a `.env` file (gitignored) at the project root with `GOOGLE_API_KEY=<your-key>` and `TOKEN_ENCRYPTION_KEY=<secret>` (generate one with `openssl rand -base64 32`). `TOKEN_ENCRYPTION_KEY` encrypts stored TrueLayer tokens; the app won't start without it, every instance that shares the database (e.g. your laptop and Render, both on Supabase) needs the **same** value, and changing it makes stored tokens unreadable (users would have to reconnect their bank). Load the file into your shell before running the app (or add the variables to your IDE run configuration):
    ```bash
    set -a; source .env; set +a
    ```
@@ -81,8 +81,8 @@ The application will start on `http://localhost:8080`
 
 ### Bank Connection
 
-- **GET** `/api/auth/connect-bank` - Initiate TrueLayer OAuth flow
-- **GET** `/callback` - OAuth callback handler
+- **GET** `/auth/connect-bank?token=<jwt>` - Start the TrueLayer OAuth flow (opened by browser navigation, so the JWT goes in the query string); redirects to TrueLayer with a signed, 15-minute `state`
+- **GET** `/callback` - OAuth callback: checks the `state`, exchanges the code, stores the tokens encrypted, then redirects to `/auth/success` or `/auth/error`
 
 ### Transactions
 
@@ -126,9 +126,9 @@ Conversations belong to one user: another user's id behaves exactly like a missi
 ## 🔄 How It Works
 
 1. **Connect Bank Account**
-   - User initiates OAuth flow via `/api/auth/connect-bank`
+   - User initiates OAuth flow via `/auth/connect-bank`
    - TrueLayer redirects back with authorization code
-   - System exchanges code for access/refresh tokens
+   - System exchanges code for access/refresh tokens and stores them encrypted (AES-256-GCM)
 
 2. **Ingest Transactions**
    - Call `/api/transactions/ingest` to fetch last 90 days of transactions
@@ -155,6 +155,8 @@ Conversations belong to one user: another user's id behaves exactly like a missi
 - "Should I invest in stocks?"
 
 ## 🔧 Development
+
+RAG debug endpoints (`/api/rag/test/retrieve`, `/api/rag/test/stats`) only exist when `app.debug-endpoints.enabled=true`; they're off by default.
 
 ### Building
 

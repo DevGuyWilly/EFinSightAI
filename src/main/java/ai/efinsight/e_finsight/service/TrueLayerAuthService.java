@@ -5,6 +5,7 @@ import ai.efinsight.e_finsight.model.TokenResponse;
 import ai.efinsight.e_finsight.model.User;
 import ai.efinsight.e_finsight.repository.UserRepository;
 import ai.efinsight.e_finsight.repository.UserTokenRepository;
+import ai.efinsight.e_finsight.util.JwtUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.*;
@@ -14,10 +15,6 @@ import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestTemplate;
 
 import java.time.LocalDateTime;
-import java.util.Base64;
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class TrueLayerAuthService {
@@ -27,29 +24,27 @@ public class TrueLayerAuthService {
     private final TrueLayerConfig config;
     private final UserTokenRepository tokenRepository;
     private final UserRepository userRepository;
+    private final JwtUtil jwtUtil;
     private final RestTemplate restTemplate = new RestTemplate();
 
     // Manual constructor (Lombok @RequiredArgsConstructor should generate this, but adding manually as workaround)
-    public TrueLayerAuthService(TrueLayerConfig config, UserTokenRepository tokenRepository, UserRepository userRepository) {
+    public TrueLayerAuthService(TrueLayerConfig config, UserTokenRepository tokenRepository, UserRepository userRepository,
+                                JwtUtil jwtUtil) {
         this.config = config;
         this.tokenRepository = tokenRepository;
         this.userRepository = userRepository;
+        this.jwtUtil = jwtUtil;
     }
 
-    // Temporary storage for state parameters (use Redis in production)
-    private final Map<String, String> stateStore = new ConcurrentHashMap<>();
-
+    // OAuth state is a signed, short-lived JWT (see JwtUtil), so no server-side storage is needed
     public String generateAndStoreState(String userId) {
-        String state = Base64.getUrlEncoder()
-                .encodeToString(UUID.randomUUID().toString().getBytes());
-
-        stateStore.put(state, userId);
-
-        return state;
+        return jwtUtil.generateOAuthState(Long.valueOf(userId));
     }
 
+    // The user id the state was issued for, or null if the state is invalid or expired
     public String validateStateAndGetUserId(String state) {
-        return stateStore.remove(state);
+        Long userId = jwtUtil.getUserIdFromOAuthState(state);
+        return userId != null ? String.valueOf(userId) : null;
     }
 
     public void exchangeCodeForTokens(String code, String userId) {
@@ -57,13 +52,7 @@ public class TrueLayerAuthService {
         headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
         headers.setBasicAuth(config.getClientId(), config.getClientSecret());
 
-        // Log client secret length and first/last chars for debugging (masked for security)
-        String clientSecret = config.getClientSecret();
-        String maskedSecret = clientSecret != null && clientSecret.length() > 4 
-            ? clientSecret.substring(0, 2) + "***" + clientSecret.substring(clientSecret.length() - 2)
-            : "***";
-        log.info("Exchanging code for tokens - Client ID: {}, Client Secret: {} (length: {}), Redirect URI: {}", 
-            config.getClientId(), maskedSecret, clientSecret != null ? clientSecret.length() : 0, config.getRedirectUri());
+        log.info("Exchanging authorization code for tokens (user: {}, redirect URI: {})", userId, config.getRedirectUri());
 
         MultiValueMap<String, String> body = new LinkedMultiValueMap<>();
         body.add("grant_type", "authorization_code");
@@ -103,7 +92,7 @@ public class TrueLayerAuthService {
             }
         } catch (org.springframework.web.client.HttpClientErrorException e) {
             log.error("Failed to exchange code for tokens - HTTP Error: {} {}", e.getStatusCode(), e.getResponseBodyAsString());
-            log.error("Client ID: {}, Redirect URI: {}", config.getClientId(), config.getRedirectUri());
+            log.error("Redirect URI used: {}", config.getRedirectUri());
             throw new RuntimeException("Token exchange failed: " + e.getResponseBodyAsString(), e);
         } catch (Exception e) {
             log.error("Failed to exchange code for tokens", e);

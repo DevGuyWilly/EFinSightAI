@@ -1,5 +1,6 @@
 package ai.efinsight.e_finsight.rag;
 
+import ai.efinsight.e_finsight.security.TestTokenCipherConfig;
 import ai.efinsight.e_finsight.llm.LLMConfig;
 import ai.efinsight.e_finsight.model.TransactionChunk;
 import ai.efinsight.e_finsight.repository.TransactionChunkRepository;
@@ -35,7 +36,7 @@ import static org.assertj.core.api.Assertions.within;
         "llm.provider=gemini"
 })
 @Import({PgVectorSchemaInitializer.class, PgVectorSchemaInitializer.EntityManagerFactoryDependsOnPgVector.class,
-        VectorStoreService.class, EmbeddingService.class, LLMConfig.class})
+        VectorStoreService.class, EmbeddingService.class, LLMConfig.class, TestTokenCipherConfig.class})
 class PgVectorSearchTest {
     private static final long USER = 1L;
     private static final long OTHER_USER = 2L;

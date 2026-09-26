@@ -16,8 +16,8 @@ public interface UserTokenRepository extends JpaRepository<UserToken, Long> {
                             Integer expiresIn) {
         UserToken token = findByUserId(userId).orElse(new UserToken());
         token.setUserId(userId);
-        token.setAccessToken(accessToken); // TODO: Encrypt
-        token.setRefreshToken(refreshToken); // TODO: Encrypt
+        token.setAccessToken(accessToken); // encrypted by UserToken's converter
+        token.setRefreshToken(refreshToken);
         token.setConsentCreatedAt(consentCreatedAt);
         token.setExpiresIn(expiresIn);
         token.setLastRefreshedAt(LocalDateTime.now());

@@ -6,7 +6,6 @@ import ai.efinsight.e_finsight.util.JwtUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Controller;
-import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.view.RedirectView;
@@ -46,7 +45,7 @@ public class TrueLayerAuthController {
         }
         Long userId = jwtUtil.getUserIdFromToken(token);
 
-        // Generate and store state parameter for user reconciliation
+        // Signed, short-lived state that ties the callback back to this user
         String state = authService.generateAndStoreState(String.valueOf(userId));
 
         // Build the auth URL dynamically using config values (matching TrueLayer official format)
@@ -61,8 +60,8 @@ public class TrueLayerAuthController {
             state
         );
 
-        log.info("Initiating bank connection for user ID: {}, state: {}", userId, state);
-        log.info("Auth URL: {}", authUrl);
+        // The URL carries the state token, so it isn't logged
+        log.info("Initiating bank connection for user ID: {}", userId);
 
         return new RedirectView(authUrl);
     }
@@ -70,29 +69,26 @@ public class TrueLayerAuthController {
     @GetMapping("/callback")
     public String handleCallBack(@RequestParam(required = false) String code,
                                  @RequestParam(required = false) String state,
-                                 @RequestParam(required = false) String error,
-                                 HttpServletRequest request) {
-        // Log the full request URL and all parameters for debugging
-        String fullUrl = request.getRequestURL().toString();
-        String queryString = request.getQueryString();
-        log.info("Callback received - Full URL: {}?{}", fullUrl, queryString != null ? queryString : "");
-        log.info("Callback parameters - code: {}, state: {}, error: {}", code, state, error);
-        
+                                 @RequestParam(required = false) String error) {
+        // The authorization code and state are credentials, so only their presence is logged
+        log.info("Callback received - code present: {}, state present: {}, error: {}",
+                code != null && !code.isEmpty(), state != null && !state.isEmpty(), error);
+
         // Handle error from TrueLayer
         if (error != null) {
             log.error("Bank authentication error from TrueLayer: {}", error);
-            return "redirect:/auth/error?message=" + error;
+            return "redirect:/auth/error?message=" + java.net.URLEncoder.encode(error, java.nio.charset.StandardCharsets.UTF_8);
         }
 
         // Validate required parameters
         if (code == null || code.isEmpty()) {
-            log.error("Missing authorization code in callback. Full URL: {}?{}", fullUrl, queryString != null ? queryString : "");
+            log.error("Missing authorization code in callback");
             log.error("This usually means: 1) User cancelled authorization, 2) Redirect URI mismatch, or 3) OAuth flow error");
             return "redirect:/auth/error?message=missing_authorization_code";
         }
 
         if (state == null || state.isEmpty()) {
-            log.error("Missing state parameter in callback. Full URL: {}?{}", fullUrl, queryString != null ? queryString : "");
+            log.error("Missing state parameter in callback");
             return "redirect:/auth/error?message=missing_state_parameter";
         }
 
@@ -100,7 +96,7 @@ public class TrueLayerAuthController {
             // Validate state and get user ID
             String userId = authService.validateStateAndGetUserId(state);
             if (userId == null) {
-                log.error("Invalid state parameter: {}", state);
+                log.error("Invalid or expired state parameter in callback");
                 return "redirect:/auth/error?message=invalid_state";
             }
             // Exchange authorization code for tokens

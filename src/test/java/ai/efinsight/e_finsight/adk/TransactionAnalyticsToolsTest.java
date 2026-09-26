@@ -1,5 +1,6 @@
 package ai.efinsight.e_finsight.adk;
 
+import ai.efinsight.e_finsight.security.TestTokenCipherConfig;
 import ai.efinsight.e_finsight.model.Transaction;
 import ai.efinsight.e_finsight.repository.TransactionRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -30,7 +31,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
         "spring.jpa.properties.hibernate.dialect=${TEST_DB_DIALECT:org.hibernate.dialect.H2Dialect}",
         "spring.jpa.hibernate.ddl-auto=create-drop"
 })
-@Import(TransactionAnalyticsTools.class)
+@Import({TransactionAnalyticsTools.class, TestTokenCipherConfig.class})
 class TransactionAnalyticsToolsTest {
     private static final long USER = 1L;
     private static final long OTHER_USER = 2L;
