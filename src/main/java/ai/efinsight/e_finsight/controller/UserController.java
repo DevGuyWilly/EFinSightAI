@@ -5,7 +5,8 @@ import ai.efinsight.e_finsight.dto.ErrorResponse;
 import ai.efinsight.e_finsight.model.User;
 import ai.efinsight.e_finsight.repository.UserRepository;
 import jakarta.validation.Valid;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -23,8 +24,9 @@ import java.util.Map;
 // to know whose password to change.
 @RestController
 @RequestMapping("/api/users")
-@Slf4j
 public class UserController {
+
+    private static final Logger log = LoggerFactory.getLogger(UserController.class);
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
