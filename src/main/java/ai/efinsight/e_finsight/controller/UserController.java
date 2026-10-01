@@ -2,6 +2,7 @@ package ai.efinsight.e_finsight.controller;
 
 import ai.efinsight.e_finsight.dto.ChangePasswordRequest;
 import ai.efinsight.e_finsight.dto.ErrorResponse;
+import ai.efinsight.e_finsight.dto.UpdatePreferencesRequest;
 import ai.efinsight.e_finsight.model.User;
 import ai.efinsight.e_finsight.repository.UserRepository;
 import jakarta.validation.Valid;
@@ -62,5 +63,24 @@ public class UserController {
         log.info("Password changed for user ID: {}", userId);
 
         return ResponseEntity.ok(Map.of("message", "Password updated successfully"));
+    }
+
+    // POST, not PUT: matches the action-style routes used elsewhere in this API (/api/transactions/ingest,
+    // /api/plan) rather than strict REST resource naming.
+    @PostMapping(value = "/preferences", produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<?> updatePreferences(@RequestBody UpdatePreferencesRequest request, Authentication authentication) {
+        Long userId = (Long) authentication.getPrincipal();
+        User user = userRepository.findById(userId).orElse(null);
+
+        if (user == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ErrorResponse("User not found"));
+        }
+
+        if (request.getHideBalances() != null) {
+            user.setHideBalances(request.getHideBalances());
+            userRepository.save(user);
+        }
+
+        return ResponseEntity.ok(Map.of("hideBalances", user.isHideBalances()));
     }
 }

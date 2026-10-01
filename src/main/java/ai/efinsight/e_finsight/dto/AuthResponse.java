@@ -12,6 +12,7 @@ public class AuthResponse {
     private String firstName;
     private String lastName;
     private boolean bankConnected;
+    private boolean hideBalances;
 
     // No-arg constructor for Jackson serialization
     public AuthResponse() {
@@ -24,6 +25,7 @@ public class AuthResponse {
         this.firstName = user.getFirstName();
         this.lastName = user.getLastName();
         this.bankConnected = user.isBankConnected();
+        this.hideBalances = user.isHideBalances();
     }
 
     // Manual getters and setters (Lombok @Data should generate these, but adding manually as workaround)
@@ -81,5 +83,13 @@ public class AuthResponse {
 
     public void setBankConnected(boolean bankConnected) {
         this.bankConnected = bankConnected;
+    }
+
+    public boolean isHideBalances() {
+        return hideBalances;
+    }
+
+    public void setHideBalances(boolean hideBalances) {
+        this.hideBalances = hideBalances;
     }
 }

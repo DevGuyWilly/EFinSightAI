@@ -35,6 +35,12 @@ public class User {
     @Column(nullable = false)
     private boolean bankConnected = false;
 
+    // User preference: hides money figures on the dashboard. Synced across devices via login/signup response
+    // and POST /api/users/preferences — there's no live push, so an already-open session on another device
+    // picks it up on its next login.
+    @Column(nullable = false)
+    private boolean hideBalances = false;
+
     @PrePersist
     protected void onCreate(){
         createdAt = LocalDateTime.now();
@@ -115,5 +121,13 @@ public class User {
 
     public void setBankConnected(boolean bankConnected) {
         this.bankConnected = bankConnected;
+    }
+
+    public boolean isHideBalances() {
+        return hideBalances;
+    }
+
+    public void setHideBalances(boolean hideBalances) {
+        this.hideBalances = hideBalances;
     }
 }
