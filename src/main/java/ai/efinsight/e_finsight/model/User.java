@@ -38,7 +38,10 @@ public class User {
     // User preference: hides money figures on the dashboard. Synced across devices via login/signup response
     // and POST /api/users/preferences — there's no live push, so an already-open session on another device
     // picks it up on its next login.
-    @Column(nullable = false)
+    // columnDefinition carries an explicit DEFAULT: ddl-auto=update's plain "not null" ALTER TABLE ADD COLUMN
+    // fails on a table that already has rows (Postgres has nothing to put in them), whereas "not null default
+    // false" backfills existing rows as part of the same statement.
+    @Column(nullable = false, columnDefinition = "boolean not null default false")
     private boolean hideBalances = false;
 
     @PrePersist
