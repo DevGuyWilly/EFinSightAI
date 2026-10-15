@@ -12,6 +12,7 @@ import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Date;
 import java.util.UUID;
 
@@ -23,6 +24,13 @@ public class JwtUtil {
     static final String OAUTH_STATE_PURPOSE = "truelayer_oauth_state";
     // Long enough to pick a bank and sign in, short enough to limit replay of a leaked state
     static final Duration OAUTH_STATE_TTL = Duration.ofMinutes(15);
+    static final String CONNECT_TICKET_PURPOSE = "truelayer_connect_ticket";
+    // Only has to survive the hop from POST /api/bank/connect-url to the browser navigation that follows it
+    static final Duration CONNECT_TICKET_TTL = Duration.ofSeconds(60);
+
+    /** What a valid connect ticket says: who it was issued to, its unique id, and when it stops working. */
+    public record ConnectTicket(Long userId, String id, Instant expiresAt) {
+    }
 
     @Value("${jwt.secret}")
     private String secret;
@@ -117,6 +125,45 @@ public class JwtUtil {
             return Long.valueOf(claims.getSubject());
         } catch (JwtException | IllegalArgumentException e) {
             log.warn("Invalid OAuth state: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Short-lived ticket that lets a browser navigation start the bank-connection flow. The navigation to
+     * /auth/connect-bank can't carry an Authorization header, so before this the login JWT itself went in the query
+     * string (browser history, server logs, Referer). A ticket is only good for starting that flow, for about a
+     * minute, and a login token is never accepted in its place. The purpose claim keeps it from working as a login
+     * token or as an OAuth state, and the reverse.
+     */
+    public String generateConnectTicket(Long userId) {
+        Date now = new Date();
+        return Jwts.builder()
+                .subject(String.valueOf(userId))
+                .claim(PURPOSE_CLAIM, CONNECT_TICKET_PURPOSE)
+                .id(UUID.randomUUID().toString())
+                .issuedAt(now)
+                .expiration(new Date(now.getTime() + CONNECT_TICKET_TTL.toMillis()))
+                .signWith(getSigningKey())
+                .compact();
+    }
+
+    // The ticket's contents, or null if it's invalid, expired, or not a connect ticket
+    public ConnectTicket parseConnectTicket(String ticket) {
+        try {
+            Claims claims = Jwts.parser()
+                    .verifyWith(getSigningKey())
+                    .build()
+                    .parseSignedClaims(ticket)
+                    .getPayload();
+            // No id or no expiry can't be tracked for single use, so it isn't a ticket this service ever issued
+            if (!CONNECT_TICKET_PURPOSE.equals(claims.get(PURPOSE_CLAIM)) || claims.getId() == null
+                    || claims.getExpiration() == null) {
+                return null;
+            }
+            return new ConnectTicket(Long.valueOf(claims.getSubject()), claims.getId(), claims.getExpiration().toInstant());
+        } catch (JwtException | IllegalArgumentException e) {
+            log.warn("Invalid connect ticket: {}", e.getMessage());
             return null;
         }
     }

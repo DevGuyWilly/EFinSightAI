@@ -1,8 +1,8 @@
 package ai.efinsight.e_finsight.controller;
 
 import ai.efinsight.e_finsight.config.TrueLayerConfig;
+import ai.efinsight.e_finsight.service.ConnectTicketService;
 import ai.efinsight.e_finsight.service.TrueLayerAuthService;
-import ai.efinsight.e_finsight.util.JwtUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Controller;
@@ -24,26 +24,28 @@ public class TrueLayerAuthController {
     
     private final TrueLayerConfig config;
     private final TrueLayerAuthService authService;
-    private final JwtUtil jwtUtil;
+    private final ConnectTicketService connectTicketService;
 
     // Manual constructor (Lombok @RequiredArgsConstructor should generate this, but adding manually as workaround)
-    public TrueLayerAuthController(TrueLayerConfig config, TrueLayerAuthService authService, JwtUtil jwtUtil) {
+    public TrueLayerAuthController(TrueLayerConfig config, TrueLayerAuthService authService,
+                                   ConnectTicketService connectTicketService) {
         this.config = config;
         this.authService = authService;
-        this.jwtUtil = jwtUtil;
+        this.connectTicketService = connectTicketService;
     }
 
-    // This endpoint is permitAll in SecurityConfig since it must be reachable via plain
-    // browser navigation (e.g. a link opened on a phone), which cannot carry an
-    // Authorization header. The JWT is validated manually here instead of via the
-    // header-based JwtAuthenticationFilter/Authentication principal used everywhere else.
+    // This endpoint is permitAll in SecurityConfig since it must be reachable via plain browser navigation, which
+    // cannot carry an Authorization header. Instead of a login JWT in the query string (browser history, server
+    // logs, Referer) it takes a short-lived, single-use ticket issued by POST /api/bank/connect-url, and that
+    // ticket is validated manually here rather than by the header-based JwtAuthenticationFilter.
+    // `ticket` is optional so a stale client still sending ?token=<jwt> lands on the error page, not a bare 400.
     @GetMapping("/auth/connect-bank")
-    public RedirectView connectBank(@RequestParam("token") String token){
-        if (!jwtUtil.validateToken(token)) {
-            log.warn("Rejected connect-bank request with invalid or expired token");
+    public RedirectView connectBank(@RequestParam(value = "ticket", required = false) String ticket){
+        Long userId = connectTicketService.redeem(ticket);
+        if (userId == null) {
+            log.warn("Rejected connect-bank request with a missing, invalid, expired or already used ticket");
             return new RedirectView("/auth/error?message=invalid_token");
         }
-        Long userId = jwtUtil.getUserIdFromToken(token);
 
         // Signed, short-lived state that ties the callback back to this user
         String state = authService.generateAndStoreState(String.valueOf(userId));

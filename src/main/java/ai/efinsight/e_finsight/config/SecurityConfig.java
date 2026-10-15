@@ -1,5 +1,6 @@
 package ai.efinsight.e_finsight.config;
 
+import ai.efinsight.e_finsight.security.JsonAuthenticationEntryPoint;
 import ai.efinsight.e_finsight.security.JwtAuthenticationFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -17,10 +18,12 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 @EnableWebSecurity
 public class SecurityConfig {
     private final JwtAuthenticationFilter jwtAuthFilter;
+    private final JsonAuthenticationEntryPoint authenticationEntryPoint;
 
     // Manual constructor (Lombok @RequiredArgsConstructor should generate this, but adding manually as workaround)
-    public SecurityConfig(JwtAuthenticationFilter jwtAuthFilter) {
+    public SecurityConfig(JwtAuthenticationFilter jwtAuthFilter, JsonAuthenticationEntryPoint authenticationEntryPoint) {
         this.jwtAuthFilter = jwtAuthFilter;
+        this.authenticationEntryPoint = authenticationEntryPoint;
     }
 
     @Bean
@@ -30,10 +33,12 @@ public class SecurityConfig {
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 )
+                // A missing, expired or invalid token is 401, not the 403 Spring Security falls back to
+                .exceptionHandling(handling -> handling.authenticationEntryPoint(authenticationEntryPoint))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/callback").permitAll() // TrueLayer callback
-                        .requestMatchers("/auth/connect-bank").permitAll() // token validated manually inside the controller, since this must be reachable via plain browser navigation
+                        .requestMatchers("/auth/connect-bank").permitAll() // ticket validated manually inside the controller, since this must be reachable via plain browser navigation
                         .requestMatchers("/auth/success", "/auth/error").permitAll() // plain browser-rendered pages at the end of the TrueLayer flow
                         .anyRequest().authenticated()
                 )

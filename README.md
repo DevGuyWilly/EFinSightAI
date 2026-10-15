@@ -78,10 +78,16 @@ The application will start on `http://localhost:8080`
 
 - **POST** `/api/auth/signup` - Create new user account
 - **POST** `/api/auth/login` - Login and get JWT token
+- **GET** `/api/me` - The signed-in user as the server has them now (`userId`, `email`, `firstName`, `lastName`, `bankConnected`, `hideBalances`, `createdAt`, `lastLoginAt`). The login response goes stale once the bank is connected or a preference changes on another device, so clients should refresh from here.
+- **POST** `/api/users/change-password` - Change the password (`currentPassword`, `newPassword`)
+- **POST** `/api/users/preferences` - Update preferences (`hideBalances`); omitted fields are left unchanged
+
+A missing, expired or invalid token on any protected route is `401` with a `WWW-Authenticate: Bearer` header and a `{message, timestamp}` JSON body (previously Spring's default `403`).
 
 ### Bank Connection
 
-- **GET** `/auth/connect-bank?token=<jwt>` - Start the TrueLayer OAuth flow (opened by browser navigation, so the JWT goes in the query string); redirects to TrueLayer with a signed, 15-minute `state`
+- **POST** `/api/bank/connect-url` - Authenticated. Returns `{"url": "/auth/connect-bank?ticket=<ticket>"}`: a ticket valid for 60 seconds and redeemable once
+- **GET** `/auth/connect-bank?ticket=<ticket>` - Start the TrueLayer OAuth flow. Opened by browser navigation, which can't carry an `Authorization` header, so it takes the ticket from the call above instead of the login JWT; redirects to TrueLayer with a signed, 15-minute `state`. A missing, invalid, expired or already-used ticket redirects to `/auth/error?message=invalid_token`. (The old `?token=<jwt>` form is no longer accepted.)
 - **GET** `/callback` - OAuth callback: checks the `state`, exchanges the code, stores the tokens encrypted, then redirects to `/auth/success` or `/auth/error`
 
 ### Transactions
@@ -126,7 +132,7 @@ Conversations belong to one user: another user's id behaves exactly like a missi
 ## 🔄 How It Works
 
 1. **Connect Bank Account**
-   - User initiates OAuth flow via `/auth/connect-bank`
+   - The client asks `POST /api/bank/connect-url` for a short-lived ticket, then navigates the browser to `/auth/connect-bank?ticket=…`
    - TrueLayer redirects back with authorization code
    - System exchanges code for access/refresh tokens and stores them encrypted (AES-256-GCM)
 
